@@ -1,6 +1,6 @@
 // .devcontainer/devcontainer.json
 {
-    "name": "OhPossum Control System Dev Container",
+    "name": "OP-CONTROLS Dev Container",
 
     // Build configuration for provided Dockerfile instead of a base image
     "build": {
