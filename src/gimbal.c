@@ -10,10 +10,9 @@
 #include <string.h>
 #include <math.h>
 
-#include "pico/stdlib.h" 
+#include "pico/stdlib.h"
 #include "hardware/pwm.h"
 #include "hardware/i2c.h"
-#include "hardware/sync.h" 
 #include "hardware/timer.h"
 
 #include "pid.h"
@@ -21,26 +20,10 @@
 #include "command.h"
 #include "gimbal_configuration.h"
 #include "rotary_utils.h"
+#include "pinout.h"
 
 #define FREQ2PERIOD(freq) ((freq) != 0 ? (1.0f / (freq)) : 0.0f) // Converts a frequency in Hz to a period in seconds
 #define SECS2USECS(secs)  ((secs) * 1000000)                     // Converts a time from seconds to micro-seconds
-
-// Pan hardware
-#define PAN_I2C_PORT             i2c0
-#define PAN_I2C_SDA_PIN          4
-#define PAN_I2C_SCL_PIN          5
-#define PAN_ENC_DIR_PIN          3
-#define PAN_PWM_PIN              6
-#define PAN_MOTOR_DIR_PIN        8
-#define PAN_LOWER_LIMIT_PIN      17
-#define PAN_UPPER_LIMIT_PIN      16
-
-// Debug hardware
-#define TEST_PIN                 22
-
-// PWM settings
-#define PWM_TOP_REG              100
-#define PWM_CLK_DIVIDER          125.0f
 
 // Controls loop frequency
 #define CONTROLS_FREQ            1000
@@ -57,49 +40,6 @@ volatile float panMotor        = 0.0f;
 volatile uint8_t panDir        = 0;
 
 volatile bool printFlag = false;
-
-/**
- * @brief Configures GPIO pins and peripherals for I2C, PWM, and debugging.
- */
-void setupGPIO() {
-    // Configure I2C Communication
-    i2c_init(PAN_I2C_PORT, 400000);
-    gpio_set_function(PAN_I2C_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(PAN_I2C_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(PAN_I2C_SDA_PIN);
-    gpio_pull_up(PAN_I2C_SCL_PIN);
-
-    // Configure PWM output
-    gpio_set_function(PAN_PWM_PIN, GPIO_FUNC_PWM);
-
-    unsigned int pwmSliceNum = pwm_gpio_to_slice_num(PAN_PWM_PIN);  // Pan and tilt PWM pins are on the same slice
-    pwm_config configPWM = pwm_get_default_config();
-    pwm_config_set_clkdiv(&configPWM, PWM_CLK_DIVIDER);
-    pwm_init(pwmSliceNum, &configPWM, true);
-    pwm_set_wrap(pwmSliceNum, PWM_TOP_REG - 1); 
-
-    pwm_set_gpio_level(PAN_PWM_PIN, 0);  // Explicitly set to 0 duty cycle initially
-    pwm_set_enabled(pwmSliceNum, true);
-
-    // Configure initial motor directions
-    gpio_init(PAN_MOTOR_DIR_PIN);
-    gpio_set_dir(PAN_MOTOR_DIR_PIN, GPIO_OUT);
-    gpio_put(PAN_MOTOR_DIR_PIN, 0);  // Default LOW, just be explicit
-
-    // Configure limit switch pins
-    gpio_init(PAN_LOWER_LIMIT_PIN);
-    gpio_set_dir(PAN_LOWER_LIMIT_PIN, GPIO_IN);
-    gpio_pull_up(PAN_LOWER_LIMIT_PIN);
-
-    gpio_init(PAN_UPPER_LIMIT_PIN);
-    gpio_set_dir(PAN_UPPER_LIMIT_PIN, GPIO_IN);
-    gpio_pull_up(PAN_UPPER_LIMIT_PIN);
-
-    // Configure debugging pin
-    gpio_init(TEST_PIN);
-    gpio_set_dir(TEST_PIN, GPIO_OUT);
-    gpio_put(TEST_PIN, 0);  // Default LOW, just be explicit
-}
 
 /**
  * @brief Set soft limits for each gimbal axis.

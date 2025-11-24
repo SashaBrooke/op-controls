@@ -43,6 +43,7 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         src/command.c
         src/gimbal_configuration.c
         src/rotary_utils.c
+        src/pinout.c
     )
 
     # Optional: Automatically collect all .c files in the src/ directory
