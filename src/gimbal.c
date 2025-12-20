@@ -1,6 +1,8 @@
 /**
  * @file gimbal.c
  * @brief Source file for gimbal controls system module.
+ * 
+ * This file contains the main entry point for the control board firmware.
  */
 
 #include <stdio.h>

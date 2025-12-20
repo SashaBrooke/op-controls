@@ -10,8 +10,12 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     # Set minimum required version of CMake
     cmake_minimum_required(VERSION 3.12)
 
-    # Include build functions from Pico SDK
+    # Set any variables required for importing libraries
+    SET(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/FreeRTOS-Kernel)
+
+    # Import libraries
     include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+    include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
 
     # Locate pre-installed picotool
     find_package(picotool REQUIRED)
@@ -62,6 +66,7 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         hardware_flash
         hardware_sync
         hardware_timer
+        FreeRTOS-Kernel-Heap4
     )
 
     # Pico-specific configuration
