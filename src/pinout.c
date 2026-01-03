@@ -8,6 +8,7 @@
 #include "hardware/pwm.h"
 
 #include "pinout.h"
+#include "uart_comm.h"
 
 /* Setup GPIO pinout */
 void setupGPIO() {
@@ -48,4 +49,7 @@ void setupGPIO() {
     gpio_init(TEST_PIN);
     gpio_set_dir(TEST_PIN, GPIO_OUT);
     gpio_put(TEST_PIN, 0);  // Default LOW, just be explicit
+
+    // Configure UART
+    uart_init_custom(UART_ID, UART_BAUDRATE, UART_TX_PIN, UART_RX_PIN);
 }

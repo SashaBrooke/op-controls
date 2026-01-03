@@ -18,6 +18,12 @@
 #define PAN_LOWER_LIMIT_PIN      17
 #define PAN_UPPER_LIMIT_PIN      16
 
+// UART hardware
+#define UART_ID                  0
+#define UART_BAUDRATE            115200
+#define UART_TX_PIN              0
+#define UART_RX_PIN              1
+
 // Debug hardware
 #define TEST_PIN                 22
 

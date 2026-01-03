@@ -27,6 +27,11 @@
 #include "gimbal_configuration.h"
 #include "rotary_utils.h"
 #include "pinout.h"
+#include "uart_comm.h"
+
+#include "stream.pb.h"
+#include "common.pb.h"
+#include "pb_encode.h"
 
 #define FREQ2PERIOD(freq) ((freq) != 0 ? (1.0f / (freq)) : 0.0f) // Converts a frequency in Hz to a period in seconds
 #define SECS2MSECS(secs)  ((secs) * 1000)                        // Converts a time from seconds to milliseconds
@@ -243,27 +248,52 @@ static void commandTask(void *arg) {
 static void streamTask(void *arg) {
     gimbal_t *g = (gimbal_t *)arg;
     TickType_t last = xTaskGetTickCount();
+    
+    // Buffer for encoded message (max message size + 5 bytes for length prefix)
+    uint8_t buffer[256];
+    
     for (;;) {
         if (g->streaming && printFlag) {
+            // Create the stream packet with axis info
+            opcomms_extcomm_StreamPacket packet = opcomms_extcomm_StreamPacket_init_zero;
+            
+            // Set header
+            packet.header.version = 1;
+            packet.header.seq = 0;  // Could increment this for sequence tracking
+            
+            // Only create packet if we have data to stream
+            bool has_data = false;
+            opcomms_extcomm_AxisInfo axis_info = opcomms_extcomm_AxisInfo_init_zero;
+            
             if (g->panPositionStream) {
-                printf("%u,", panPos);
-
-                if (g->gimbalMode == GIMBAL_MODE_ARMED) {
-                    printf("%f,", g->panPositionSetpoint);
+                axis_info.axis = opcomms_extcomm_Axis_AXIS_PAN;
+                axis_info.angle_deg = (float)panPos * (360.0f / 4096.0f);  // Convert raw angle to degrees
+                has_data = true;
+            }
+            
+            if (g->panMotorStream && has_data) {
+                // Convert panDir to MotorDirection enum
+                if (panDir == 0) {
+                    axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CW;
+                } else {
+                    axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CCW;
                 }
             }
-            if (g->panPidStream) {
-                printf("%f,%f,%f,%f,",
-                    g->panPositionController.prevError,  // Current loop error
-                    g->panPositionController.integrator,
-                    g->panPositionController.differentiator,
-                    g->panPositionController.output
-                );
+            
+            if (has_data) {
+                packet.which_payload = opcomms_extcomm_StreamPacket_axis_info_tag;
+                packet.payload.axis_info = axis_info;
+                
+                // Encode message with delimited format (length prefix + message)
+                pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+                
+                if (pb_encode_delimited(&stream, opcomms_extcomm_StreamPacket_fields, &packet)) {
+                    // Write to UART non-blocking
+                    uart_write_nonblocking(buffer, stream.bytes_written);
+                } else {
+                    // Encoding failed, could log error here
+                }
             }
-            if (g->panMotorStream) {
-                printf("%f,%u,", panMotor, panDir);
-            }
-            printf("\n");
 
             printFlag = false;  // Reset print flag after streaming
         }

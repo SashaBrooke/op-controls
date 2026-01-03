@@ -30,12 +30,14 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     # Initialize the Pico SDK
     pico_sdk_init()
 
-    # # Generate protobuf headers
-    # set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
-    # find_package(Nanopb REQUIRED)
-    # nanopb_generate_cpp(TARGET proto 
-    #     ${CMAKE_SOURCE_DIR}/lib/op-comms/internal.proto
-    # )
+    # Generate protobuf headers
+    set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
+    find_package(Nanopb REQUIRED)
+    
+    nanopb_generate_cpp(TARGET proto
+        ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm/stream.proto
+        ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm/common.proto
+    )
 
     # Add includes
     include_directories(src)
@@ -48,6 +50,7 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         src/gimbal_configuration.c
         src/rotary_utils.c
         src/pinout.c
+        src/uart_comm.c
     )
 
     # Optional: Automatically collect all .c files in the src/ directory
@@ -63,10 +66,12 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         pico_stdlib
         hardware_i2c
         hardware_pwm
+        hardware_uart
         hardware_flash
         hardware_sync
         hardware_timer
         FreeRTOS-Kernel-Heap4
+        proto
     )
 
     # Pico-specific configuration
