@@ -29,8 +29,8 @@
 #include "pinout.h"
 #include "uart_comm.h"
 
-#include "stream.pb.h"
-#include "common.pb.h"
+#include "extcomm/stream.pb.h"
+#include "extcomm/common.pb.h"
 #include "pb_encode.h"
 
 #define FREQ2PERIOD(freq) ((freq) != 0 ? (1.0f / (freq)) : 0.0f) // Converts a frequency in Hz to a period in seconds

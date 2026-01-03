@@ -35,6 +35,7 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     find_package(Nanopb REQUIRED)
     
     nanopb_generate_cpp(TARGET proto
+        RELPATH ${CMAKE_SOURCE_DIR}/lib/op-comms
         ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm/stream.proto
         ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm/common.proto
     )

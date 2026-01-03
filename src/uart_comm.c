@@ -21,6 +21,7 @@ typedef struct {
 } uart_ring_buffer_t;
 
 static uart_ring_buffer_t tx_buffer;
+static uart_inst_t *uart_inst = NULL;
 static uart_hw_t *uart_hw_inst = NULL;
 static uint8_t uart_irq_num = 0;
 
@@ -46,7 +47,7 @@ static inline uint16_t ring_buffer_count(void) {
  */
 static void uart_irq_handler(void) {
     // Check if TX FIFO has space and we have data to send
-    while (uart_is_writable(uart_hw_inst) && tx_buffer.read_pos != tx_buffer.write_pos) {
+    while (uart_is_writable(uart_inst) && tx_buffer.read_pos != tx_buffer.write_pos) {
         uart_hw_inst->dr = tx_buffer.buffer[tx_buffer.read_pos];
         tx_buffer.read_pos = (tx_buffer.read_pos + 1) % UART_TX_BUFFER_SIZE;
     }
@@ -63,11 +64,11 @@ void uart_init_custom(uint8_t uart_id, uint32_t baudrate, uint8_t tx_pin, uint8_
     tx_buffer.read_pos = 0;
     
     // Get UART hardware instance
-    uart_inst_t *uart = uart_id == 0 ? uart0 : uart1;
-    uart_hw_inst = uart_get_hw(uart);
+    uart_inst = uart_id == 0 ? uart0 : uart1;
+    uart_hw_inst = uart_get_hw(uart_inst);
     
     // Initialize UART
-    uart_init(uart, baudrate);
+    uart_init(uart_inst, baudrate);
     
     // Set GPIO pins
     gpio_set_function(tx_pin, GPIO_FUNC_UART);
