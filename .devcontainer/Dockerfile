@@ -12,7 +12,8 @@ RUN apt-get update && \
         git  \
         python3 \
         python3-pip \
-        vim
+        vim \
+        less
 
 # Setup the dev directory
 WORKDIR /home/dev

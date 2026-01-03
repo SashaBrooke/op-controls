@@ -10,8 +10,12 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     # Set minimum required version of CMake
     cmake_minimum_required(VERSION 3.12)
 
-    # Include build functions from Pico SDK
+    # Set any variables required for importing libraries
+    SET(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/FreeRTOS-Kernel)
+
+    # Import libraries
     include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+    include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
 
     # Locate pre-installed picotool
     find_package(picotool REQUIRED)
@@ -26,12 +30,15 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     # Initialize the Pico SDK
     pico_sdk_init()
 
-    # # Generate protobuf headers
-    # set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
-    # find_package(Nanopb REQUIRED)
-    # nanopb_generate_cpp(TARGET proto 
-    #     ${CMAKE_SOURCE_DIR}/lib/op-comms/internal.proto
-    # )
+    # Generate protobuf headers
+    set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
+    find_package(Nanopb REQUIRED)
+    
+    nanopb_generate_cpp(TARGET proto
+        RELPATH ${CMAKE_SOURCE_DIR}/lib/op-comms
+        ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm/stream.proto
+        ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm/common.proto
+    )
 
     # Add includes
     include_directories(src)
@@ -43,6 +50,8 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         src/command.c
         src/gimbal_configuration.c
         src/rotary_utils.c
+        src/pinout.c
+        src/uart_comm.c
     )
 
     # Optional: Automatically collect all .c files in the src/ directory
@@ -58,9 +67,12 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         pico_stdlib
         hardware_i2c
         hardware_pwm
+        hardware_uart
         hardware_flash
         hardware_sync
         hardware_timer
+        FreeRTOS-Kernel-Heap4
+        proto
     )
 
     # Pico-specific configuration
