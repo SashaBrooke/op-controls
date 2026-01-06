@@ -16,6 +16,7 @@
 #include "hardware/pwm.h"
 #include "hardware/i2c.h"
 #include "hardware/timer.h"
+#include "hardware/uart.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -27,10 +28,8 @@
 #include "gimbal_configuration.h"
 #include "rotary_utils.h"
 #include "pinout.h"
-#include "uart_comm.h"
 
-#include "extcomm/stream.pb.h"
-#include "extcomm/common.pb.h"
+#include "extcomm.pb.h"
 #include "pb_encode.h"
 
 #define FREQ2PERIOD(freq) ((freq) != 0 ? (1.0f / (freq)) : 0.0f) // Converts a frequency in Hz to a period in seconds
@@ -56,6 +55,9 @@ volatile float panMotor        = 0.0f;
 volatile uint8_t panDir        = 0;
 
 volatile bool printFlag = false;
+
+static uint32_t streamSeq = 0;
+static uint32_t streamSeqEpoch = 0;
 
 // RTOS structures
 static QueueHandle_t cmdQueue = NULL;
@@ -245,60 +247,64 @@ static void commandTask(void *arg) {
     }
 }
 
+// Should be stopped and started by command processor (if streaming enabled)
 static void streamTask(void *arg) {
     gimbal_t *g = (gimbal_t *)arg;
     TickType_t last = xTaskGetTickCount();
     
     // Buffer for encoded message (max message size + 5 bytes for length prefix)
-    uint8_t buffer[256];
+    // uint8_t buffer[256];
     
     for (;;) {
-        if (g->streaming && printFlag) {
-            // Create the stream packet with axis info
-            opcomms_extcomm_StreamPacket packet = opcomms_extcomm_StreamPacket_init_zero;
-            
-            // Set header
-            packet.header.version = 1;
-            packet.header.seq = 0;  // Could increment this for sequence tracking
-            
-            // Only create packet if we have data to stream
-            bool has_data = false;
-            opcomms_extcomm_AxisInfo axis_info = opcomms_extcomm_AxisInfo_init_zero;
-            
-            if (g->panPositionStream) {
-                axis_info.axis = opcomms_extcomm_Axis_AXIS_PAN;
-                axis_info.angle_deg = (float)panPos * (360.0f / 4096.0f);  // Convert raw angle to degrees
-                has_data = true;
-            }
-            
-            if (g->panMotorStream && has_data) {
-                // Convert panDir to MotorDirection enum
-                if (panDir == 0) {
-                    axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CW;
-                } else {
-                    axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CCW;
-                }
-            }
-            
-            if (has_data) {
-                packet.which_payload = opcomms_extcomm_StreamPacket_axis_info_tag;
-                packet.payload.axis_info = axis_info;
-                
-                // Encode message with delimited format (length prefix + message)
-                pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-                
-                if (pb_encode_delimited(&stream, opcomms_extcomm_StreamPacket_fields, &packet)) {
-                    // Write to UART non-blocking
-                    uart_write_nonblocking(buffer, stream.bytes_written);
-                } else {
-                    // Encoding failed, could log error here
-                }
-            }
+        // opcomms_extcomm_StreamPacket packet = opcomms_extcomm_StreamPacket_init_zero;
 
-            printFlag = false;  // Reset print flag after streaming
-        }
+        // packet.has_header = true;
+        // packet.header.version = opcomms_extcomm_SchemaVersion_SCHEMA_VERSION;
+        // packet.header.seq = streamSeq;
+        // packet.header.seq_epoch = streamSeqEpoch;
 
-        vTaskDelayUntil(&last, pdMS_TO_TICKS(g->streamRate));
+        // opcomms_extcomm_AxisInfo axis_info = opcomms_extcomm_AxisInfo_init_zero;
+        // axis_info.axis = opcomms_extcomm_Axis_AXIS_PAN;
+        // axis_info.angle_deg = (float)panPos * AS5600_RAW_TO_DEGREES;
+
+        // // Map panDir to MotorDirection enum
+        // if (panDir == AS5600_CLOCK_WISE) {
+        //     axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CW;
+        // } else if (panDir == AS5600_COUNTERCLOCK_WISE) {
+        //     axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CCW;
+        // } else {
+        //     axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_UNKNOWN;
+        // }
+
+        // packet.which_payload = opcomms_extcomm_StreamPacket_axis_info_tag;
+        // packet.payload.axis_info = axis_info;
+
+        // pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+        // if (pb_encode_delimited(&stream, opcomms_extcomm_StreamPacket_fields, &packet)) {
+        //     uart_write_nonblocking(buffer, stream.bytes_written);
+        //     streamSeq++;
+        //     if (streamSeq == 0) {
+        //         streamSeqEpoch++;
+        //     }
+        // } else {
+        //     // Encoding failed
+        // }
+
+        gpio_put(TEST_PIN, 1);
+        
+        // // UART write a 52-byte payload byte-by-byte
+        // const char *msg = "012345678901234567890123456789\r\n";
+
+        // for (int i = 0; i < 32; i++) {
+        //     while (!uart_is_writable(UART_ID)) {
+        //         taskYIELD();
+        //     }
+        //     uart_putc_raw(UART_ID, msg[i]);
+        // }
+        uint16_t panRawAngle = AS5600_getRawAngle(&g->panEncoder);
+        gpio_put(TEST_PIN, 0);
+
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
     }
 }
 
@@ -374,7 +380,7 @@ int main() {
     xTaskCreate(controlTask, "ctrl", 512, bundle.gimbal, configMAX_PRIORITIES - 1, NULL);
     // xTaskCreate(commsTask,   "com",  512, NULL,           2,                       NULL);
     // xTaskCreate(commandTask, "cmd",  768, &bundle,        2,                       NULL);
-    // xTaskCreate(streamTask,  "str",  512, bundle.gimbal,  1,                       NULL);
+    xTaskCreate(streamTask,  "str",  512, bundle.gimbal, 1,                        NULL);
 
     vTaskStartScheduler();
     for (;;);

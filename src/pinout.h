@@ -19,7 +19,7 @@
 #define PAN_UPPER_LIMIT_PIN      16
 
 // UART hardware
-#define UART_ID                  0
+#define UART_ID                  uart0
 #define UART_BAUDRATE            115200
 #define UART_TX_PIN              0
 #define UART_RX_PIN              1
@@ -32,7 +32,7 @@
 #define PWM_CLK_DIVIDER          125.0f
 
 /**
- * @brief Configures GPIO pins and peripherals for I2C, PWM, and debugging.
+ * @brief Configures GPIO pins and peripherals for I2C, UART, PWM, and debugging.
  */
 void setupGPIO();
 

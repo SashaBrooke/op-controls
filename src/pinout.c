@@ -6,9 +6,9 @@
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/pwm.h"
+#include "hardware/uart.h"
 
 #include "pinout.h"
-#include "uart_comm.h"
 
 /* Setup GPIO pinout */
 void setupGPIO() {
@@ -45,11 +45,14 @@ void setupGPIO() {
     gpio_set_dir(PAN_UPPER_LIMIT_PIN, GPIO_IN);
     gpio_pull_up(PAN_UPPER_LIMIT_PIN);
 
-    // Configure debugging pin
+    // Configure debugging pins
     gpio_init(TEST_PIN);
     gpio_set_dir(TEST_PIN, GPIO_OUT);
     gpio_put(TEST_PIN, 0);  // Default LOW, just be explicit
 
     // Configure UART
-    uart_init_custom(UART_ID, UART_BAUDRATE, UART_TX_PIN, UART_RX_PIN);
+    uart_init(UART_ID, UART_BAUDRATE);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    uart_set_format(UART_ID, 8, 1, UART_PARITY_NONE);
 }
