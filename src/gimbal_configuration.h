@@ -83,6 +83,15 @@ typedef struct {
 } gimbal_configuration_t;
 
 /**
+ * @struct gimbal_bundle_t
+ * @brief Bundles the runtime state and saved configuration of the gimbal.
+ */
+typedef struct {
+    gimbal_t *gimbal;
+    gimbal_configuration_t *config;
+} gimbal_bundle_t;
+
+/**
  * @brief Initialises the gimbal runtime state.
  *
  * This function prepares the gimbal structure for operation by 

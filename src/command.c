@@ -12,6 +12,9 @@
 
 #include "pico/stdlib.h"
 
+#include "FreeRTOS.h"
+#include "task.h"
+
 #include "command.h"
 #include "pid.h"
 #include "as5600.h"
@@ -183,10 +186,16 @@ void executeCommand(char *command, gimbal_t *gimbal, gimbal_configuration_t *con
         // Copy current gimbal gains to configuration before being saved
         config->panPositionController = gimbal->panPositionController;
 
+        // Suspend other tasks while flash is saving
+        vTaskSuspendAll();
+
         // Save configuration
         saveGimbalConfiguration(config);
         printf("\n");
         gimbal->savedConfiguration = true;
+
+        // Bring back other tasks
+        xTaskResumeAll();
     } 
     
     else if (strcmp(name, "gimbal-read") == 0) {

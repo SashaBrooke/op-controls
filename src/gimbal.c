@@ -1,6 +1,8 @@
 /**
  * @file gimbal.c
  * @brief Source file for gimbal controls system module.
+ * 
+ * This file contains the main entry point for the control board firmware.
  */
 
 #include <stdio.h>
@@ -10,40 +12,36 @@
 #include <string.h>
 #include <math.h>
 
-#include "pico/stdlib.h" 
+#include "pico/stdlib.h"
 #include "hardware/pwm.h"
 #include "hardware/i2c.h"
-#include "hardware/sync.h" 
 #include "hardware/timer.h"
+#include "hardware/uart.h"
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
 
 #include "pid.h"
 #include "as5600.h"
 #include "command.h"
 #include "gimbal_configuration.h"
 #include "rotary_utils.h"
+#include "pinout.h"
+
+#include "extcomm.pb.h"
+#include "pb_encode.h"
 
 #define FREQ2PERIOD(freq) ((freq) != 0 ? (1.0f / (freq)) : 0.0f) // Converts a frequency in Hz to a period in seconds
+#define SECS2MSECS(secs)  ((secs) * 1000)                        // Converts a time from seconds to milliseconds
 #define SECS2USECS(secs)  ((secs) * 1000000)                     // Converts a time from seconds to micro-seconds
-
-// Pan hardware
-#define PAN_I2C_PORT             i2c0
-#define PAN_I2C_SDA_PIN          4
-#define PAN_I2C_SCL_PIN          5
-#define PAN_ENC_DIR_PIN          3
-#define PAN_PWM_PIN              6
-#define PAN_MOTOR_DIR_PIN        8
-#define PAN_LOWER_LIMIT_PIN      17
-#define PAN_UPPER_LIMIT_PIN      16
-
-// Debug hardware
-#define TEST_PIN                 22
-
-// PWM settings
-#define PWM_TOP_REG              100
-#define PWM_CLK_DIVIDER          125.0f
 
 // Controls loop frequency
 #define CONTROLS_FREQ            1000
+
+// RTOS variables
+#define CMD_QUEUE_LEN            8
+#define CMD_MAX_LEN              100
 
 // Homing
 #define HOMING_SPEED             0.1  // (angular position / second)
@@ -58,48 +56,11 @@ volatile uint8_t panDir        = 0;
 
 volatile bool printFlag = false;
 
-/**
- * @brief Configures GPIO pins and peripherals for I2C, PWM, and debugging.
- */
-void setupGPIO() {
-    // Configure I2C Communication
-    i2c_init(PAN_I2C_PORT, 400000);
-    gpio_set_function(PAN_I2C_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(PAN_I2C_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(PAN_I2C_SDA_PIN);
-    gpio_pull_up(PAN_I2C_SCL_PIN);
+static uint32_t streamSeq = 0;
+static uint32_t streamSeqEpoch = 0;
 
-    // Configure PWM output
-    gpio_set_function(PAN_PWM_PIN, GPIO_FUNC_PWM);
-
-    unsigned int pwmSliceNum = pwm_gpio_to_slice_num(PAN_PWM_PIN);  // Pan and tilt PWM pins are on the same slice
-    pwm_config configPWM = pwm_get_default_config();
-    pwm_config_set_clkdiv(&configPWM, PWM_CLK_DIVIDER);
-    pwm_init(pwmSliceNum, &configPWM, true);
-    pwm_set_wrap(pwmSliceNum, PWM_TOP_REG - 1); 
-
-    pwm_set_gpio_level(PAN_PWM_PIN, 0);  // Explicitly set to 0 duty cycle initially
-    pwm_set_enabled(pwmSliceNum, true);
-
-    // Configure initial motor directions
-    gpio_init(PAN_MOTOR_DIR_PIN);
-    gpio_set_dir(PAN_MOTOR_DIR_PIN, GPIO_OUT);
-    gpio_put(PAN_MOTOR_DIR_PIN, 0);  // Default LOW, just be explicit
-
-    // Configure limit switch pins
-    gpio_init(PAN_LOWER_LIMIT_PIN);
-    gpio_set_dir(PAN_LOWER_LIMIT_PIN, GPIO_IN);
-    gpio_pull_up(PAN_LOWER_LIMIT_PIN);
-
-    gpio_init(PAN_UPPER_LIMIT_PIN);
-    gpio_set_dir(PAN_UPPER_LIMIT_PIN, GPIO_IN);
-    gpio_pull_up(PAN_UPPER_LIMIT_PIN);
-
-    // Configure debugging pin
-    gpio_init(TEST_PIN);
-    gpio_set_dir(TEST_PIN, GPIO_OUT);
-    gpio_put(TEST_PIN, 0);  // Default LOW, just be explicit
-}
+// RTOS structures
+static QueueHandle_t cmdQueue = NULL;
 
 /**
  * @brief Set soft limits for each gimbal axis.
@@ -213,17 +174,13 @@ void setupAxisLimits(gimbal_t *gimbal) {
 }
 
 /**
- * @brief Timer callback to perform the gimbal control system loop.
+ * @brief Performs the gimbal control system loop.
  * 
- * @param timer Pointer to the repeating timer instance calling the callback.
- * @return Always returns true to keep the timer active.
+ * @param gimbal Pointer to the gimbal state structure.
  */
-bool updateMotors(repeating_timer_t *timer) {
+void updateMotors(gimbal_t *gimbal) {
     // Timing debug
     gpio_put(TEST_PIN, 1);
-
-    // Get gimbal state
-    gimbal_t *gimbal = (gimbal_t *)timer->user_data;
 
     // Pan
     uint16_t panRawAngle = AS5600_getRawAngle(&gimbal->panEncoder);
@@ -258,8 +215,97 @@ bool updateMotors(repeating_timer_t *timer) {
 
     // Timing debug
     gpio_put(TEST_PIN, 0);
+}
 
-    return true;
+static void controlTask(void *arg) {
+    gimbal_t *g = (gimbal_t *)arg;
+    TickType_t last = xTaskGetTickCount();
+    for (;;) {
+        updateMotors(g);
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(SECS2MSECS(FREQ2PERIOD(CONTROLS_FREQ))));
+    }
+}
+
+static void commsTask(void *arg) {
+    (void)arg;
+    for (;;) {
+        char *cmd = readSerialCommand_nonBlocking();
+        if (cmd) {
+            xQueueSend(cmdQueue, &cmd, 0);
+            resetSerialCommandInput();
+        }
+    }
+}
+
+static void commandTask(void *arg) {
+    gimbal_bundle_t *bundle = (gimbal_bundle_t *)arg;
+    char *cmd;
+    for (;;) {
+        if (xQueueReceive(cmdQueue, &cmd, portMAX_DELAY) == pdPASS) {
+            processCommands(cmd, bundle->gimbal, bundle->config);
+        }
+    }
+}
+
+// Should be stopped and started by command processor (if streaming enabled)
+static void streamTask(void *arg) {
+    gimbal_t *g = (gimbal_t *)arg;
+    TickType_t last = xTaskGetTickCount();
+    
+    // Buffer for encoded message (max message size + 5 bytes for length prefix)
+    // uint8_t buffer[256];
+    
+    for (;;) {
+        // opcomms_extcomm_StreamPacket packet = opcomms_extcomm_StreamPacket_init_zero;
+
+        // packet.has_header = true;
+        // packet.header.version = opcomms_extcomm_SchemaVersion_SCHEMA_VERSION;
+        // packet.header.seq = streamSeq;
+        // packet.header.seq_epoch = streamSeqEpoch;
+
+        // opcomms_extcomm_AxisInfo axis_info = opcomms_extcomm_AxisInfo_init_zero;
+        // axis_info.axis = opcomms_extcomm_Axis_AXIS_PAN;
+        // axis_info.angle_deg = (float)panPos * AS5600_RAW_TO_DEGREES;
+
+        // // Map panDir to MotorDirection enum
+        // if (panDir == AS5600_CLOCK_WISE) {
+        //     axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CW;
+        // } else if (panDir == AS5600_COUNTERCLOCK_WISE) {
+        //     axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_CCW;
+        // } else {
+        //     axis_info.motor_direction = opcomms_extcomm_MotorDirection_MOTOR_DIR_UNKNOWN;
+        // }
+
+        // packet.which_payload = opcomms_extcomm_StreamPacket_axis_info_tag;
+        // packet.payload.axis_info = axis_info;
+
+        // pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+        // if (pb_encode_delimited(&stream, opcomms_extcomm_StreamPacket_fields, &packet)) {
+        //     uart_write_nonblocking(buffer, stream.bytes_written);
+        //     streamSeq++;
+        //     if (streamSeq == 0) {
+        //         streamSeqEpoch++;
+        //     }
+        // } else {
+        //     // Encoding failed
+        // }
+
+        gpio_put(TEST_PIN, 1);
+        
+        // // UART write a 52-byte payload byte-by-byte
+        // const char *msg = "012345678901234567890123456789\r\n";
+
+        // for (int i = 0; i < 32; i++) {
+        //     while (!uart_is_writable(UART_ID)) {
+        //         taskYIELD();
+        //     }
+        //     uart_putc_raw(UART_ID, msg[i]);
+        // }
+        uint16_t panRawAngle = AS5600_getRawAngle(&g->panEncoder);
+        gpio_put(TEST_PIN, 0);
+
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
+    }
 }
 
 int main() {
@@ -316,51 +362,63 @@ int main() {
     displayGimbal(&gimbal);
 
     printf("Starting controls loop\n");
-    repeating_timer_t timer;  // Consider using real time clock peripheral if for use longer than ~72 mins
-    add_repeating_timer_us(-SECS2USECS(FREQ2PERIOD(CONTROLS_FREQ)), updateMotors, &gimbal, &timer);
+    // repeating_timer_t timer;  // Consider using real time clock peripheral if for use longer than ~72 mins
+    // add_repeating_timer_us(-SECS2USECS(FREQ2PERIOD(CONTROLS_FREQ)), updateMotors, &gimbal, &timer);
 
-    sleep_ms(1000);
-    setupAxisLimits(&gimbal);
-    sleep_ms(1000);
+    // sleep_ms(1000);
+    // setupAxisLimits(&gimbal);
+    // sleep_ms(1000);
 
     // Enable serial commands
     resetSerialCommandInput();
     char* command;
 
-    while(true) {
-        if (gimbal.streaming && printFlag) {
-            // Handle specific stream outputs
-            if (gimbal.panPositionStream) {
-                printf("%u,", panPos);
+    // Setup RTOS structures and tasks
+    cmdQueue = xQueueCreate(CMD_QUEUE_LEN, sizeof(char *));
+    gimbal_bundle_t bundle = { .gimbal = &gimbal, .config = &gimbalConfig };
+
+    xTaskCreate(controlTask, "ctrl", 512, bundle.gimbal, configMAX_PRIORITIES - 1, NULL);
+    // xTaskCreate(commsTask,   "com",  512, NULL,           2,                       NULL);
+    // xTaskCreate(commandTask, "cmd",  768, &bundle,        2,                       NULL);
+    xTaskCreate(streamTask,  "str",  512, bundle.gimbal, 1,                        NULL);
+
+    vTaskStartScheduler();
+    for (;;);
+
+    // while(true) {
+    //     if (gimbal.streaming && printFlag) {
+    //         // Handle specific stream outputs
+    //         if (gimbal.panPositionStream) {
+    //             printf("%u,", panPos);
                 
-                if (gimbal.gimbalMode == GIMBAL_MODE_ARMED) {
-                    printf("%f,", gimbal.panPositionSetpoint);
-                }
-            }
-            if (gimbal.panPidStream) {
-                printf("%f,%f,%f,%f,",
-                    gimbal.panPositionController.prevError,  // Actually the error from the current controls loop
-                    gimbal.panPositionController.integrator,
-                    gimbal.panPositionController.differentiator,
-                    gimbal.panPositionController.output
-                );
-            }
-            if (gimbal.panMotorStream) {
-                printf("%f,%u,", panMotor, panDir);
-            }
-            printf("\n");
+    //             if (gimbal.gimbalMode == GIMBAL_MODE_ARMED) {
+    //                 printf("%f,", gimbal.panPositionSetpoint);
+    //             }
+    //         }
+    //         if (gimbal.panPidStream) {
+    //             printf("%f,%f,%f,%f,",
+    //                 gimbal.panPositionController.prevError,  // Actually the error from the current controls loop
+    //                 gimbal.panPositionController.integrator,
+    //                 gimbal.panPositionController.differentiator,
+    //                 gimbal.panPositionController.output
+    //             );
+    //         }
+    //         if (gimbal.panMotorStream) {
+    //             printf("%f,%u,", panMotor, panDir);
+    //         }
+    //         printf("\n");
 
-            printFlag = false;  // Reset print flag
-        }
+    //         printFlag = false;  // Reset print flag
+    //     }
 
-        command = readSerialCommand_nonBlocking();
-        if (command != NULL) {
-            cancel_repeating_timer(&timer);
-            processCommands(command, &gimbal, &gimbalConfig);
-            add_repeating_timer_us(-SECS2USECS(FREQ2PERIOD(CONTROLS_FREQ)), updateMotors, &gimbal, &timer);
-            resetSerialCommandInput();
-        }
-    }
+    //     command = readSerialCommand_nonBlocking();
+    //     if (command != NULL) {
+    //         // cancel_repeating_timer(&timer);
+    //         processCommands(command, &gimbal, &gimbalConfig);
+    //         // add_repeating_timer_us(-SECS2USECS(FREQ2PERIOD(CONTROLS_FREQ)), updateMotors, &gimbal, &timer);
+    //         resetSerialCommandInput();
+    //     }
+    // }
 
     return 0;
 }
