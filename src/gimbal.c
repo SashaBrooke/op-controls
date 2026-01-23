@@ -292,15 +292,19 @@ static void streamTask(void *arg) {
 
         gpio_put(TEST_PIN, 1);
         
-        // UART write a 3-byte payload byte-by-byte
-        const char *msg = "0\r\n";
+        // // UART write a 3-byte payload byte-by-byte
+        // const char *msg = "0\r\n";
 
-        for (int i = 0; i < 3; i++) {
-            while (!uart_is_writable(UART_ID)) {
-                taskYIELD();
-            }
-            uart_putc_raw(UART_ID, msg[i]);
-        }
+        // for (int i = 0; i < 3; i++) {
+        //     while (!uart_is_writable(UART_ID)) {
+        //         taskYIELD();
+        //     }
+        //     uart_putc_raw(UART_ID, msg[i]);
+        // }
+        
+        const char *msg = "01234567890123456789012345678901234567890123456789012345678912\r\n";
+        fwrite(msg, 1, 64, stdout);
+
         // uint16_t panRawAngle = AS5600_getRawAngle(&g->panEncoder);
         gpio_put(TEST_PIN, 0);
 
