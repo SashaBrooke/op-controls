@@ -1,19 +1,18 @@
 /**
- * @file pinout.c
- * @brief Defines hardware pinout setup behaviour.
+ * @file hardware_configuration.c
+ * @brief Defines hardware configuration setup behaviour.
  */
 
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/pwm.h"
-#include "hardware/uart.h"
 
-#include "pinout.h"
+#include "hardware_configuration.h"
 
-/* Setup GPIO pinout */
-void setupGPIO() {
+/* Setup GPIO configuration */
+void setup_gpio() {
     // Configure I2C Communication
-    i2c_init(PAN_I2C_PORT, 400000);
+    i2c_init(PAN_I2C_PORT, 400000); // TODO: define speed in constant
     gpio_set_function(PAN_I2C_SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(PAN_I2C_SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(PAN_I2C_SDA_PIN);
@@ -26,7 +25,7 @@ void setupGPIO() {
     pwm_config configPWM = pwm_get_default_config();
     pwm_config_set_clkdiv(&configPWM, PWM_CLK_DIVIDER);
     pwm_init(pwmSliceNum, &configPWM, true);
-    pwm_set_wrap(pwmSliceNum, PWM_TOP_REG - 1); 
+    pwm_set_wrap(pwmSliceNum, PWM_TOP_REG - 1);
 
     pwm_set_gpio_level(PAN_PWM_PIN, 0);  // Explicitly set to 0 duty cycle initially
     pwm_set_enabled(pwmSliceNum, true);
@@ -49,10 +48,4 @@ void setupGPIO() {
     gpio_init(TEST_PIN);
     gpio_set_dir(TEST_PIN, GPIO_OUT);
     gpio_put(TEST_PIN, 0);  // Default LOW, just be explicit
-
-    // Configure UART
-    uart_init(UART_ID, UART_BAUDRATE);
-    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-    uart_set_format(UART_ID, 8, 1, UART_PARITY_NONE);
 }

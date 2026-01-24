@@ -19,7 +19,7 @@
 #define PID_H
 
 /**
- * @struct PID_t
+ * @struct pid_controller_t
  * @brief Structure representing a PID controller.
  *
  * This structure stores all parameters and internal states for a 
@@ -47,7 +47,7 @@ typedef struct {
 
     float output;           /**< Current output value */
     float maxMeasurement;   /**< Maximum measurement value (for rotational angular wrapping) */
-} PID_t;
+} pid_controller_t;
 
 /**
  * @brief Initializes a PID controller with specified parameters.
@@ -62,9 +62,9 @@ typedef struct {
  * @param intLimMax Maximum integrator limit.
  * @param T Sample time (in seconds).
  * @param maxMeasurement Maximum measurement value (for rotational angular wrapping).
- * @return A `PID_t` structure initialized with the specified parameters.
+ * @return A `pid_controller_t` structure initialized with the specified parameters.
  */
-PID_t PID_setup(float Kp, float Ki, float Kd, float tau, float outLimMin,
+pid_controller_t pid_setup(float Kp, float Ki, float Kd, float tau, float outLimMin,
                 float outLimMax, float intLimMin, float intLimMax, 
                 float T, float maxMeasurement);
 
@@ -73,7 +73,7 @@ PID_t PID_setup(float Kp, float Ki, float Kd, float tau, float outLimMin,
  * 
  * @param pid Pointer to the PID controller structure.
  */
-void PID_reset(volatile PID_t *pid);
+void pid_reset(volatile pid_controller_t *pid);
 
 /**
  * @brief Updates the PID controller and computes a new output.
@@ -89,7 +89,7 @@ void PID_reset(volatile PID_t *pid);
  * the setpoint and the measurement. It updates the integrator and 
  * differentiator states.
  */
-float PID_update(volatile PID_t *pid, float setpoint, float measurement,
+float pid_update(volatile pid_controller_t *pid, float setpoint, float measurement,
                  float lowerLimit, float upperLimit);
 
 /**
@@ -104,6 +104,6 @@ float PID_update(volatile PID_t *pid, float setpoint, float measurement,
  * `newMin` and `newMax`. Useful for applications where outputs need 
  * to be within a specific range.
  */
-float PID_normaliseOutput(volatile PID_t *pid, float newMin, float newMax);
+float pid_normalise_output(volatile pid_controller_t *pid, float newMin, float newMax);
 
 #endif // PID_H

@@ -7,28 +7,31 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "pid.h"
-#include "rotary_utils.h"
-#include "gimbal_configuration.h"
+#include "controls/pid.h"
+#include "utils/rotary_utils.h"
+#include "gimbal/gimbal_state.h"
 
 #define NO_OUTPUT 0.0f
 
 /* Setup the PID controller */
-PID_t PID_setup(float Kp, float Ki, float Kd, float tau, 
-                float outLimMin, float outLimMax, float intLimMin, 
-                float intLimMax, float T, float maxMeasurement) {
+pid_controller_t pid_setup(float Kp, float Ki, float Kd, float tau,
+    float outLimMin, float outLimMax, float intLimMin,
+    float intLimMax, float T, float maxMeasurement) {
+
     // Prevent invalid configurations
     if (T <= 0.0f) {
-        fprintf(stderr, "Error: Sampling time T must be greater than zero.\n");
+        // fprintf(stderr, "Error: Sampling time T must be greater than zero.\n");
+        // TODO: queue error packet
         exit(EXIT_FAILURE);
     }
     if (maxMeasurement <= 0.0f) {
-        fprintf(stderr, "Error: Maximum measurement must be greater than zero.\n");
+        // fprintf(stderr, "Error: Maximum measurement must be greater than zero.\n");
+        // TODO: queue error packet
         exit(EXIT_FAILURE);
     }
 
     // Initialize the PID structure
-    PID_t pid = {
+    pid_controller_t pid = {
         .Kp = Kp,
         .Ki = Ki,
         .Kd = Kd,
@@ -50,7 +53,7 @@ PID_t PID_setup(float Kp, float Ki, float Kd, float tau,
 }
 
 /* Reset PID saved state parameters */
-void PID_reset(volatile PID_t *pid) {
+void pid_reset(volatile pid_controller_t *pid) {
     pid->integrator = 0.0f;
     pid->prevError = 0.0f;
     pid->differentiator = 0.0f;
@@ -59,7 +62,7 @@ void PID_reset(volatile PID_t *pid) {
 }
 
 /* Update the PID controller */
-float PID_update(volatile PID_t *pid, float setpoint, float measurement,
+float pid_update(volatile pid_controller_t *pid, float setpoint, float measurement,
                  float lowerLimit, float upperLimit) {
     // Error signal
     float error;
@@ -128,7 +131,7 @@ float PID_update(volatile PID_t *pid, float setpoint, float measurement,
 }
 
 /* Normalise controller output to specified range */
-float PID_normaliseOutput(volatile PID_t *pid, float newMin, float newMax) {
+float pid_normalise_output(volatile pid_controller_t *pid, float newMin, float newMax) {
     return ((pid->output - pid->outLimMin) / 
         (pid->outLimMax - pid->outLimMin) * 
         (newMax - newMin) + newMin);
