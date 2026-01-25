@@ -4,6 +4,8 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
+#include "gimbal/gimbal.h"
+
 typedef struct {
     QueueHandle_t rxQueue;
     QueueHandle_t txQueue;

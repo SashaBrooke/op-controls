@@ -5,6 +5,7 @@
 #include "tasks/comm_process_task.h"
 #include "tasks/comm_tx_task.h"
 #include "tasks/stream_task.h"
+#include "tasks/sync_task.h"
 
 static QueueHandle_t rxQueue = NULL;
 static QueueHandle_t txQueue = NULL;
@@ -22,9 +23,10 @@ void task_manager_init(gimbal_t *gimbal) {
     ctx.gimbal = gimbal;
 
     // Create tasks
+    xTaskCreate(sync_task,         "sync",       STACK_SIZE_SYNC,          &ctx, PRIORITY_SYNC,          NULL);
     xTaskCreate(control_task,      "controls",   STACK_SIZE_CONTROLS,      &ctx, PRIORITY_CONTROLS,      NULL);
-    // xTaskCreate(comm_rx_task,      "rx-comms",   STACK_SIZE_RX_COMMS,      &ctx, PRIORITY_RX_COMMS,      NULL);
+    // xTaskCreate(comm_rx_task,      "rx-comms",   STACK_SIZE_COMMS_RX,      &ctx, PRIORITY_COMMS_RX,      NULL);
     // xTaskCreate(comm_process_task, "comms-proc", STACK_SIZE_COMMS_PROCESS, &ctx, PRIORITY_COMMS_PROCESS, NULL);
-    // xTaskCreate(comm_tx_task,      "tx-comms",   STACK_SIZE_TX_COMMS,      &ctx, PRIORITY_TX_COMMS,      NULL);
-    // xTaskCreate(stream_task,       "stream",     STACK_SIZE_STREAM,        &ctx, PRIORITY_STREAM,        NULL);
+    xTaskCreate(stream_task,       "stream",     STACK_SIZE_STREAM,        &ctx, PRIORITY_STREAM,        NULL);
+    xTaskCreate(comm_tx_task,      "tx-comms",   STACK_SIZE_COMMS_TX,      &ctx, PRIORITY_COMMS_TX,      NULL);
 }

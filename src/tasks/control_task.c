@@ -33,7 +33,7 @@ void control_task(void *pvParameters) {
             // float pan_pwm_duty_cycle = pid_normalise_output(&gimbal->engine.pan_position_controller, -100.0f, 100.0f); // TODO: standardise -100.0f and 100.0f into constants
             uint8_t pan_direction = pan_pid_output > 0 ? AS5600_CLOCK_WISE : AS5600_COUNTERCLOCK_WISE;
             gpio_put(PAN_MOTOR_DIR_PIN, pan_direction);
-            pwm_set_gpio_level(PAN_PWM_PIN, (uint16_t)(abs(pan_pid_output))); // TODO: investigate if this breaks at PWM 100 (wrap value 99)
+            pwm_set_gpio_level(PAN_PWM_PIN, (uint16_t)(abs(pan_pid_output)));
 
             // Also update gimbal state
             gimbal->state.pan_motor_pwm = (uint16_t)(abs(pan_pid_output));

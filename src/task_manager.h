@@ -10,18 +10,20 @@
 #include "task_context.h"
 
 // Task priorities
+#define PRIORITY_SYNC           6
 #define PRIORITY_CONTROLS       5
-#define PRIORITY_RX_COMMS       4
+#define PRIORITY_COMMS_RX       4
 #define PRIORITY_COMMS_PROCESS  3
 #define PRIORITY_STREAM         2
-#define PRIORITY_TX_COMMS       1
+#define PRIORITY_COMMS_TX       1
 
 // Task stack sizes
+#define STACK_SIZE_SYNC           256
 #define STACK_SIZE_CONTROLS       512
-#define STACK_SIZE_RX_COMMS       256
+#define STACK_SIZE_COMMS_RX       256
 #define STACK_SIZE_COMMS_PROCESS  512
 #define STACK_SIZE_STREAM         256
-#define STACK_SIZE_TX_COMMS       256
+#define STACK_SIZE_COMMS_TX       256
 
 // Queue lengths
 #define RX_QUEUE_LEN            8

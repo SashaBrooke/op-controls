@@ -62,6 +62,7 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         src/tasks/comm_tx_task.c
         src/tasks/control_task.c
         src/tasks/stream_task.c
+        src/tasks/sync_task.c
         src/utils/rotary_utils.c
     )
 

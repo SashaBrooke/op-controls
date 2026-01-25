@@ -39,7 +39,7 @@ typedef struct {
     // float pan_velocity_setpoint;
 
     // Axis motor information
-    float pan_motor_pwm;
+    uint16_t pan_motor_pwm;
     uint8_t pan_motor_dir;
 
     // Axis soft limits
