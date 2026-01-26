@@ -4,12 +4,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "controls/pid.h"
+#include "software_configuration.h"
 
 // Gimbal serial number is restricted to a uint8 for now
 #define GIMBAL_SERIAL_NUMBER_MIN  0
 #define GIMBAL_SERIAL_NUMBER_MAX  255
-
-#define CONTROLS_FREQ 1000 // TODO: replace fixed 1000Hz with dynamic time sensing in PID loop
 
 /**
  * @struct gimbal_configuration_t

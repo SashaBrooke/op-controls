@@ -19,16 +19,17 @@ void comm_tx_task(void *pvParameters) {
     TickType_t last = xTaskGetTickCount();
 
     for (;;) {
-        gpio_put(TEST_PIN, 1);
-
         // Wait for packet from TX queue
         if (xQueueReceive(ctx->txQueue, &packet, 0) == pdTRUE) {
+            // Only pulse when transmitting
+            gpio_put(TEST_PIN, 1);
+
             // Write packet to USB stdio
             fwrite(packet.data, 1, packet.len, stdout);
             fflush(stdout);
-        }
 
-        gpio_put(TEST_PIN, 0);
+            gpio_put(TEST_PIN, 0);
+        }
 
         vTaskDelayUntil(&last, 1);
     }

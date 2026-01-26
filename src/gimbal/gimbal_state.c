@@ -8,7 +8,7 @@ const float         GIMBAL_DEFAULT_MOTOR_PWM               = 0.0f;
 const uint8_t       GIMBAL_DEFAULT_MOTOR_DIR               = 0; // TODO: either use as5600 constant or pull from proto file
 const float         GIMBAL_DEFAULT_AXIS_SETPOINT           = GIMBAL_DEFAULT_UNSET_ROM;
 const float         GIMBAL_DEFAULT_AXIS_SOFT_LIMIT         = GIMBAL_DEFAULT_UNSET_ROM;
-const bool          GIMBAL_DEFAULT_GLOBAL_STREAMING_STATUS = true;
+const bool          GIMBAL_DEFAULT_GLOBAL_STREAMING_STATUS = false; // Only stream when requested
 const uint16_t      GIMBAL_DEFAULT_STREAM_RATE             = 30; // Hz
 
 void setup_gimbal_state(gimbal_state_t *state) {

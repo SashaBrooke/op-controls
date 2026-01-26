@@ -8,10 +8,10 @@
 
 #include "tasks/control_task.h"
 #include "gimbal/gimbal.h"
-#include "gimbal/gimbal_configuration.h"
 #include "sensors/as5600.h"
 #include "utils/time_utils.h"
 #include "hardware_configuration.h"
+#include "software_configuration.h"
 #include "task_context.h"
 
 void control_task(void *pvParameters) {
