@@ -1,10 +1,12 @@
 /**
- * @file pid.h
+ * @file rotary_utils.h
  * @brief A simple utilities library for rotary aplication calculations.
  */
 
 #ifndef ROTARY_UTILS_H
 #define ROTARY_UTILS_H
+
+#define MAX_DEGREES 360.0f
 
 /**
  * @enum rotaryutils_result_e

@@ -10,8 +10,16 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     # Set minimum required version of CMake
     cmake_minimum_required(VERSION 3.12)
 
-    # Include build functions from Pico SDK
+    # Set the target board and platform
+    set(PICO_BOARD pico_w)
+    set(PICO_PLATFORM rp2040)
+
+    # Set any variables required for importing libraries
+    SET(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/FreeRTOS-Kernel)
+
+    # Import libraries
     include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+    include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
 
     # Locate pre-installed picotool
     find_package(picotool REQUIRED)
@@ -26,27 +34,37 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
     # Initialize the Pico SDK
     pico_sdk_init()
 
-    # # Generate protobuf headers
-    # set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
-    # find_package(Nanopb REQUIRED)
-    # nanopb_generate_cpp(TARGET proto 
-    #     ${CMAKE_SOURCE_DIR}/lib/op-comms/internal.proto
-    # )
+    # Generate protobuf headers
+    set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
+    find_package(Nanopb REQUIRED)
+    
+    nanopb_generate_cpp(TARGET proto
+        ${CMAKE_SOURCE_DIR}/lib/op-comms/extcomm.proto
+    )
 
     # Add includes
     include_directories(src)
 
     set(SOURCES
-        src/gimbal.c
-        src/as5600.c
-        src/pid.c
-        src/command.c
-        src/gimbal_configuration.c
-        src/rotary_utils.c
+        src/main.c
+        src/hardware_configuration.c
+        src/task_manager.c
+        src/comms/command.c
+        src/comms/packet.c
+        src/controls/pid.c
+        src/gimbal/gimbal_configuration.c
+        src/gimbal/gimbal_engine.c
+        src/gimbal/gimbal_state.c
+        src/gimbal/gimbal.c
+        src/sensors/as5600.c
+        src/tasks/comm_process_task.c
+        src/tasks/comm_rx_task.c
+        src/tasks/comm_tx_task.c
+        src/tasks/control_task.c
+        src/tasks/stream_task.c
+        src/tasks/sync_task.c
+        src/utils/rotary_utils.c
     )
-
-    # Optional: Automatically collect all .c files in the src/ directory
-    # file(GLOB SOURCES ${PROJECT_SOURCE_DIR}/src/*.c)
 
     # Add the main executable
     add_executable(${PROJECT_NAME}
@@ -61,18 +79,20 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         hardware_flash
         hardware_sync
         hardware_timer
+        FreeRTOS-Kernel-Heap4
+        proto
     )
 
     # Pico-specific configuration
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
     pico_enable_stdio_uart(${PROJECT_NAME} 0)
 
-    # moves everything except the .uf2 (only output used) into /bin
+    # Moves everything except the .uf2 (only output used) into /bin
     set_target_properties(${PROJECT_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
 
-    # generate .uf2 .elf .bin
+    # Generate .uf2 .elf .bin
     pico_add_extra_outputs(${PROJECT_NAME})
 
 elseif(TARGET_GROUP STREQUAL "TESTING")
