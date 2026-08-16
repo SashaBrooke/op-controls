@@ -8,6 +8,11 @@
         "context": ".."
     },
 
+    "runArgs": [
+        "--privileged",
+        "-v", "/dev/bus/usb:/dev/bus/usb:z"
+    ],
+
     // All VS Code-related settings and extensions go under "customizations.vscode"
     "customizations": {
         "vscode": {

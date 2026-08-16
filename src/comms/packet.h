@@ -9,8 +9,8 @@
 #define MAX_TX_BYTES_PER_MS MAX_PACKET_SIZE
 
 // Packet framing
-#define PACKET_MARKER 0xAA
-#define PACKET_MARKER_SIZE 1 // Bytes
+#define SYNC_BYTE 0xAA
+#define PAYLOAD_OFFSET 2 // 1 (sync) + 1 (length)
 
 typedef struct {
     uint8_t len;

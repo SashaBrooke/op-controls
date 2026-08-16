@@ -50,6 +50,7 @@ if(TARGET_GROUP STREQUAL "FIRMWARE")
         src/hardware_configuration.c
         src/task_manager.c
         src/comms/command.c
+        src/comms/stream.c
         src/comms/packet.c
         src/controls/pid.c
         src/gimbal/gimbal_configuration.c

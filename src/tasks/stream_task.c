@@ -53,13 +53,15 @@ void stream_task(void *pvParameters) {
             // Package into packet
             packet_t packet = {0};
 
-            packet.data[0] = PACKET_MARKER; // Add 0xAA sync marker at the start
+            pb_ostream_t stream = pb_ostream_from_buffer(&packet.data[PAYLOAD_OFFSET],
+                                                        MAX_PACKET_SIZE - PAYLOAD_OFFSET);
 
-            pb_ostream_t stream = pb_ostream_from_buffer(&packet.data[PACKET_MARKER_SIZE],
-                                                        MAX_PACKET_SIZE - PACKET_MARKER_SIZE);
+            if (pb_encode(&stream, opcomms_extcomm_ExtcommPacket_fields, &extcomm_packet)) {
+                uint8_t payload_len = stream.bytes_written;
 
-            if (pb_encode_delimited(&stream, opcomms_extcomm_ExtcommPacket_fields, &extcomm_packet)) {
-                packet.len = stream.bytes_written + PACKET_MARKER_SIZE;
+                packet.data[0] = SYNC_BYTE;
+                packet.data[1] = payload_len;
+                packet.len = payload_len + PAYLOAD_OFFSET;
 
                 // Send packet to TX queue
                 xQueueSend(ctx->txQueue, &packet, 0);
