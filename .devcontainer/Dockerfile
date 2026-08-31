@@ -12,7 +12,17 @@ RUN apt-get update && \
         git  \
         python3 \
         python3-pip \
-        vim
+        vim \
+        less \
+        automake \
+        libtool \
+        pkg-config \
+        libusb-1.0-0-dev \
+        libhidapi-dev \
+        texinfo \
+        libjim-dev \
+        jimsh \
+        gdb-multiarch
 
 # Setup the dev directory
 WORKDIR /home/dev
@@ -20,7 +30,7 @@ WORKDIR /home/dev
 # Download and install RP2040 Toolchains
 RUN apt-get -y install cmake \
         gcc-arm-none-eabi \
-        libnewlib-arm-none-eabi 
+        libnewlib-arm-none-eabi
 
 # Clone and setup the RP2040 SDK
 RUN git clone https://github.com/raspberrypi/pico-sdk /home/package/pico-sdk && \
@@ -48,6 +58,14 @@ RUN git clone https://github.com/raspberrypi/picotool.git /home/package/picotool
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j$(nproc) && \
     cmake --install .
+
+# Clone and setup OpenOCD (with RP2040 support)
+RUN git clone https://github.com/raspberrypi/openocd.git /home/package/openocd --depth=1 && \
+    cd /home/package/openocd && \
+    ./bootstrap && \
+    ./configure --enable-cmsis-dap --enable-hidapi && \
+    make -j$(nproc) && \
+    make install
 
 # Final working directory
 WORKDIR /home/Desktop
