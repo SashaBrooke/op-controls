@@ -41,7 +41,7 @@ void resetSerialCommandInput() {
     and return full command string when CR, LF or CRLF is encountered 
 */
 char *readSerialCommand_nonBlocking() {
-    char chr = getchar_timeout_us(0);
+    int chr = getchar_timeout_us(0);
 
     // Skip if nothing to read (invalid) or error occurred
     if (chr == NO_VAL || chr == ENDSTDIN) {
