@@ -32,8 +32,8 @@
 #define PAN_ENC_DIR_PIN          3
 #define PAN_PWM_PIN              6
 #define PAN_MOTOR_DIR_PIN        8
-#define PAN_LOWER_LIMIT_PIN      17
-#define PAN_UPPER_LIMIT_PIN      16
+#define PAN_LOWER_LIMIT_PIN      15
+#define PAN_UPPER_LIMIT_PIN      14
 
 // Debug hardware
 #define TEST_PIN                 22
@@ -48,7 +48,7 @@
 // Homing
 #define HOMING_SPEED             0.1  // (angular position / second)
 #define HOMING_DISTANCE          40   // (angular position)
-#define HOMING_TIMEOUT           10   // (seconds)
+#define HOMING_TIMEOUT           60   // (seconds)
 #define SOFT_LIMIT_OFFSET_ANGLE  5    // (degrees)
 
 // Stream variables
@@ -310,6 +310,11 @@ int main() {
     gimbalConfig.panPositionController = gimbal.panPositionController;
 
     displayGimbalConfiguration(&gimbalConfig);
+
+    // DEBUG LED
+    gpio_init(25);
+    gpio_set_dir(25, GPIO_OUT);
+    gpio_put(25, 1);
 
     gimbal.panEncoder = AS5600_setup(PAN_I2C_PORT, PAN_ENC_DIR_PIN, AS5600_CLOCK_WISE);
 
