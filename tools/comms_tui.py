@@ -82,6 +82,9 @@ def unframe_packet(frame: bytes) -> pb.IntcommPacket:
 class CommsTUI:
     def __init__(self, port: str, baud: int = 115200):
         self.ser = serial.Serial(port, baud, timeout=0.05)
+        self.ser.dtr = True
+        self.ser.rts = True
+
         self.running = True
         self.lock = threading.Lock()
         self.packet_id = 1
