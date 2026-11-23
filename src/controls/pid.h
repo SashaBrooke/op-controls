@@ -40,12 +40,15 @@ typedef struct {
 
     float T;                /**< Sample time (in seconds) */
 
+    float proportional;     /**< Current proportional value */
     float integrator;       /**< Current integrator value */
-    float prevError;        /**< Previous error value */
     float differentiator;   /**< Current differentiator value */
+
+    float prevError;        /**< Previous error value */
     float prevMeasurement;  /**< Previous measurement value */
 
     float output;           /**< Current output value */
+
     float maxMeasurement;   /**< Maximum measurement value (for rotational angular wrapping) */
 } pid_controller_t;
 

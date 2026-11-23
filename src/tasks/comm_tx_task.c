@@ -1,38 +1,37 @@
-#include <stdio.h>
+#include "pico/stdlib.h"
+#include "tusb.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 
-#include "pico/stdlib.h"
-
-#include "comm_tx_task.h"
+#include "tasks/comm_tx_task.h"
 #include "task_context.h"
 #include "comms/packet.h"
 #include "hardware_configuration.h"
-#include "software_configuration.h"
-#include "utils/time_utils.h"
 
 void comm_tx_task(void *pvParameters) {
     task_context_t *ctx = (task_context_t *)pvParameters;
-
-    packet_t packet;
-
-    TickType_t last = xTaskGetTickCount();
+    wire_frame_t packet;
 
     for (;;) {
-        // Wait for packet from TX queue
-        if (xQueueReceive(ctx->txQueue, &packet, 0) == pdTRUE) {
-            // Only pulse when transmitting
-            gpio_put(TEST_PIN, 1);
+        if (xQueueReceive(ctx->txQueue, &packet, portMAX_DELAY) == pdTRUE) {
+            if (tud_cdc_connected()) {
+                gpio_put(TEST_PIN, 1);
 
-            // Write packet to USB stdio
-            fwrite(packet.data, 1, packet.len, stdout);
-            fflush(stdout);
+                size_t sent = 0;
+                while (sent < packet.len) {
+                    uint32_t written = tud_cdc_write(packet.data + sent, packet.len - sent);
+                    sent += written;
+                    if (sent < packet.len) {
+                        tud_cdc_write_flush();
+                        vTaskDelay(pdMS_TO_TICKS(1));
+                    }
+                }
+                tud_cdc_write_flush();
 
-            gpio_put(TEST_PIN, 0);
+                gpio_put(TEST_PIN, 0);
+            }
         }
-
-        vTaskDelayUntil(&last, pdMS_TO_TICKS(SECS2MSECS(FREQ2PERIOD(CONTROLS_FREQ))));
     }
 }

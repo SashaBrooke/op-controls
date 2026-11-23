@@ -8,6 +8,10 @@
 #define GIMBAL_DEFAULT_UNSET_ROM  (-1)
 #define GIMBAL_360_ROM            (-2)
 
+// Streaming rate bounds (in Hz)
+#define GIMBAL_MIN_STREAM_RATE_HZ  1
+#define GIMBAL_MAX_STREAM_RATE_HZ  200
+
 /**
  * @enum gimbal_mode_e
  * @brief Operational modes for the gimbal.
@@ -49,6 +53,12 @@ typedef struct {
     // Global stream
     bool streaming;
     uint16_t stream_rate;
+
+    // Individual stream toggles
+    bool pan_pos_stream;
+    bool pan_pid_stream;
+    bool pan_motor_stream;
+
 } gimbal_state_t;
 
 void setup_gimbal_state(gimbal_state_t *state);

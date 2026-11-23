@@ -45,6 +45,10 @@ void setup_gpio() {
     gpio_pull_up(PAN_UPPER_LIMIT_PIN);
 
     // Configure debugging pins
+    gpio_init(ERROR_PIN);
+    gpio_set_dir(ERROR_PIN, GPIO_OUT);
+    gpio_put(ERROR_PIN, 0);  // Default LOW, just be explicit
+
     gpio_init(TEST_PIN);
     gpio_set_dir(TEST_PIN, GPIO_OUT);
     gpio_put(TEST_PIN, 0);  // Default LOW, just be explicit

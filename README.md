@@ -45,9 +45,7 @@ For more information, see the documentation in the `autobuild.sh` script.
 
 ## Running the tests
 
-Assuming the tests are built (as described in the steps above):
-
-- Navigate to the build directory (if not already there)
-    - `cd build`
-- Run the tests
-    - `ctest` (optionally `ctest --output-on-error -v` for more detail)
+Assuming the tests are built (as described in the steps above), run them (from the project root) with:
+```bash
+ctest --test-dir build --output-on-failure -V
+```

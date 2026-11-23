@@ -1,629 +1,200 @@
-// TODO: rework comms processing to use nanopb
-
-/**
- * @file command.c
- * @brief Source file for serial command gimbal control module.
- */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <errno.h>
-#include <ctype.h>
-
-#include "pico/stdlib.h"
-
-#include "FreeRTOS.h"
-#include "task.h"
-
-#include "command.h"
-#include "controls/pid.h"
+#include "comms/command.h"
 #include "sensors/as5600.h"
-#include "gimbal/gimbal.h"
 #include "gimbal/gimbal_configuration.h"
-
-// // Special character values
-// #define LF           10
-// #define CR           13
-// #define NO_VAL       254
-// #define ENDSTDIN     255
-
-// // Input radix
-// #define DECIMAL_BASE 10
-
-// // Input buffer and pointer
-// static char strg[100];
-// static int lp = 0;
-
-// /* Reset command buffer memory and pointer (to start) */
-// void resetSerialCommandInput() {
-//     memset(strg, 0, sizeof(strg));
-//     lp = 0;
-// }
-
-// /* 
-//     Read a single character from serial input into a buffer
-//     and return full command string when CR, LF or CRLF is encountered 
-// */
-// char *readSerialCommand_nonBlocking() {
-//     char chr = getchar_timeout_us(0);
-
-//     // Skip if nothing to read (invalid) or error occurred
-//     if (chr == NO_VAL || chr == ENDSTDIN) {
-//         return NULL;
-//     }
-
-//     // Only process valid ASCII characters, CR, or LF
-//     if (chr >= 32 && chr <= 126) {
-//         strg[lp++] = chr;
-//     }
-
-//     bool endOfInput = (chr == CR && (getchar_timeout_us(0) == LF)) || (chr == CR) || (chr == LF);
-
-//     bool bufferFull = (lp == (sizeof(strg) - 1));
-
-//     // Terminate string on CR, LF, or CRLF or buffer full
-//     if (endOfInput || bufferFull) {
-//         strg[lp] = 0;  // Null-terminate
-//         if (strlen(strg) > 0) {
-//             return strg; // WARNING: INPUT BUFFER AND POINTER MUST BE RESET AFTER A COMMAND IS RETURNED
-//         }
-//     }
-
-//     return NULL;
-// }
-
-// /* Process, split and call execute on multiple commands */
-// void processCommands(char *input, gimbal_t *gimbal, gimbal_configuration_t *config) {
-//     char *command = strtok(input, " ");
-
-//     // Until no comands left to process, execute the current function
-//     while (command != NULL) {
-//         executeCommand(command, gimbal, config);
-//         command = strtok(NULL, " ");
-//     }
-// }
-
-// /* Execute individual commands */
-// void executeCommand(char *command, gimbal_t *gimbal, gimbal_configuration_t *config) {
-//     if (command == NULL || strlen(command) == 0) {
-//         printf("Empty command encountered.\n");
-//         return;
-//     }
-
-//     char *equals = strchr(command, '=');
-//     char *name = command;
-//     char *valueStr = NULL;
-
-//     // For commands where a value is expected, terminate at the equals and separate the value
-//     if (equals) {
-//         *equals = '\0';
-//         valueStr = equals + 1;
-//     }
-
-//     // ####################################################################################
-//     //                               AVAILABLE COMMANDS
-//     // ####################################################################################
-    
-//     command_t commands[] = {
-//         // General
-//         {"help", "Show available commands."},
-
-//         // Config
-//         {"config-read", "Display the current gimbal configuration."},
-//         {"config-save", "Save the current gimbal configuration."},
-
-//         // Gimbal
-//         {"gimbal-read", "Display the current state of the gimbal."},
-//         {"gimbal-free", "Set the gimbal to free mode."},
-//         {"gimbal-arm", "Arm the gimbal and set initial pan and tilt setpoints."},
-//         {"gimbal-serialno", "Set the gimbal serial number (limited to uint8 values)."},
-
-//         // Stream
-//         {"stream-rate", "Set the global stream rate."},
-//         {"stream-global", "Enable or disable streaming (global)."},
-//         {"stream-pan-pos", "Enable or disable pan position streaming."},
-//         {"stream-pan-pid", "Enable or disable pan PID streaming."},
-//         {"stream-pan-motor", "Enable or disable pan motor streaming."},
-
-//         // Pan
-//         {"pan-setpos", "Set the pan setpoint."},
-//         {"pan-pid-kp", "Set the proportional gain (Kp) for the pan PID controller."},
-//         {"pan-pid-ki", "Set the integral gain (Ki) for the pan PID controller."},
-//         {"pan-pid-kd", "Set the derivative gain (Kd) for the pan PID controller."},
-//         {"pan-pid-tau", "Set the derivative filter coefficient (tau) for the pan PID controller."},
-//         {"pan-pid-outLimMin", "Set the lower output limit for the pan PID controller."},
-//         {"pan-pid-outLimMax", "Set the upper output limit for the pan PID controller."},
-//         {"pan-pid-intLimMin", "Set the lower integrator limit for the pan PID controller."},
-//         {"pan-pid-intLimMax", "Set the upper integrator limit for the pan PID controller."},
-//         {"pan-pid-revert", "Revert to the last saved pan PID configuration."},
-//     };
-
-//     size_t numCommands = sizeof(commands) / sizeof(command_t);
-
-//     if (strcmp(name, "help") == 0) {
-//         printf("\n");
-
-//         // Command name and type section formatting
-//         const int nameWidth = 20;
-//         char currentSection[256] = "";
-
-//         printf("Available commands:\n");
-
-//         for (size_t i = 0; i < numCommands; ++i) {
-//             char section[256];
-//             const char *dashPosition = strchr(commands[i].name, '-');
-
-//             if (dashPosition != NULL) {
-//                 size_t sectionLength = dashPosition - commands[i].name;
-//                 strncpy(section, commands[i].name, sectionLength);
-//                 section[sectionLength] = '\0';
-//             } else {
-//                 // If no dash, use "General" as the section
-//                 strcpy(section, "general");
-//             }
-
-//             // Print section name if starting to show commands from a new section
-//             if (strcmp(currentSection, section) != 0) {
-//                 currentSection[0] = toupper(section[0]);
-//                 strcpy(&currentSection[1], &section[1]);
-//                 printf("  %s\n", currentSection);
-//                 strcpy(currentSection, section);
-//             }
-
-//             printf("    %-*s %s\n", nameWidth, commands[i].name, commands[i].description);
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "config-read") == 0) {
-//         printf("\n");
-//         displayGimbalConfiguration(config);
-//     } 
-    
-//     else if (strcmp(name, "config-save") == 0) {
-//         printf("\n");
-
-//         // Copy current gimbal gains to configuration before being saved
-//         config->panPositionController = gimbal->panPositionController;
-
-//         // Suspend other tasks while flash is saving
-//         vTaskSuspendAll();
-
-//         // Save configuration
-//         saveGimbalConfiguration(config);
-//         printf("\n");
-//         gimbal->savedConfiguration = true;
-
-//         // Bring back other tasks
-//         xTaskResumeAll();
-//     } 
-    
-//     else if (strcmp(name, "gimbal-read") == 0) {
-//         printf("\n");
-//         displayGimbal(gimbal);
-//     } 
-
-//     else if (strcmp(name, "gimbal-free") == 0) {
-//         printf("\n");
-//         gimbal->gimbalMode = GIMBAL_MODE_FREE;
-//         printf("Gimbal disarmed\n");
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "gimbal-arm") == 0) {
-//         printf("\n");
-
-//         if (gimbal->panLowerLimit == GIMBAL_DEFAULT_UNSET_ROM || gimbal->panUpperLimit == GIMBAL_DEFAULT_UNSET_ROM) {
-//             printf("Pan axis limits are unset. Cannot arm.\n");
-//             printf("\n\n");
-//             return;
-//         }
-
-//         // Get current gimbal angles and set setpoint for each axis to the current angle of that axis (smooth arming)
-//         uint16_t panRawAngle = AS5600_getRawAngle(&gimbal->panEncoder);
-//         bool inPanSoftLimits;
-//         if (gimbal->panLowerLimit < gimbal->panUpperLimit) {
-//             inPanSoftLimits = (panRawAngle >= gimbal->panLowerLimit && 
-//                             panRawAngle <= gimbal->panUpperLimit);
-//         } else if (gimbal->panLowerLimit > gimbal->panUpperLimit) {
-//             inPanSoftLimits = (panRawAngle >= gimbal->panLowerLimit || 
-//                             panRawAngle <= gimbal->panUpperLimit);
-//         } else {
-//             inPanSoftLimits = true;
-//         }
-
-//         if (!inPanSoftLimits) {
-//             printf("Gimbal not in pan limits. Cannot arm.\n\n");
-//             return;
-//         }
-
-//         gimbal->panPositionSetpoint = (float)panRawAngle;
-
-//         gimbal->gimbalMode = GIMBAL_MODE_ARMED;
-//         printf("Gimbal armed\n");
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "gimbal-serialno") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             long value = strtol(valueStr, &endptr, DECIMAL_BASE);
-
-//             if (errno != 0 || *endptr != '\0' || value < GIMBAL_SERIAL_NUMBER_MIN || value > GIMBAL_SERIAL_NUMBER_MAX) {
-//                 printf("Invalid value for 'gimbal-serialno'. Must be between %d-%d.\n",
-//                        GIMBAL_SERIAL_NUMBER_MIN, GIMBAL_SERIAL_NUMBER_MAX);
-//             } else {
-//                 config->serialNumber = (int)value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated gimbal serial number to %d\n", (int)value);
-//             }
-//         } else {
-//             printf("Command 'gimbal-serialno' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "stream-rate") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             long value = strtol(valueStr, &endptr, DECIMAL_BASE);
-
-//             if (errno != 0 || *endptr != '\0' || value < GIMBAL_FAST_STREAM_RATE || value > GIMBAL_SLOW_STREAM_RATE) {
-//                 printf("Invalid value for 'stream-rate'. Use a value between %d-%d.\n",
-//                     GIMBAL_FAST_STREAM_RATE, GIMBAL_SLOW_STREAM_RATE);
-//             } else {
-//                 gimbal->streamRate = (int)value;
-//                 printf("Updated global stream rate to %d\n", (int)value);
-//             }
-//         } else {
-//             printf("Command 'stream-rate' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "stream-global") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             long value = strtol(valueStr, &endptr, DECIMAL_BASE);
-
-//             if (errno != 0 || *endptr != '\0' || (value != 0 && value != 1)) {
-//                 printf("Invalid value for 'stream-global'. Use 0 (false) or 1 (true).\n");
-//             } else {
-//                 gimbal->streaming = (bool)value;
-//                 printf("%s streaming (global)\n", value ? "Enabled" : "Disabled");
-//             }
-//         } else {
-//             printf("Command 'stream-global' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "stream-pan-pos") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             long value = strtol(valueStr, &endptr, DECIMAL_BASE);
-
-//             if (errno != 0 || *endptr != '\0' || (value != 0 && value != 1)) {
-//                 printf("Invalid value for 'stream-pan-pos'. Use 0 (false) or 1 (true).\n");
-//             } else {
-//                 gimbal->panPositionStream = (bool)value;
-//                 printf("%s pan position streaming\n", value ? "Enabled" : "Disabled");
-//             }
-//         } else {
-//             printf("Command 'stream-pan-pos' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "stream-pan-pid") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             long value = strtol(valueStr, &endptr, DECIMAL_BASE);
-
-//             if (errno != 0 || *endptr != '\0' || (value != 0 && value != 1)) {
-//                 printf("Invalid value for 'stream-pan-pid'. Use 0 (false) or 1 (true).\n");
-//             } else {
-//                 gimbal->panPositionStream = (bool)value;
-//                 printf("%s pan pid streaming\n", value ? "Enabled" : "Disabled");
-//             }
-//         } else {
-//             printf("Command 'stream-pan-pid' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "stream-pan-motor") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             long value = strtol(valueStr, &endptr, DECIMAL_BASE);
-
-//             if (errno != 0 || *endptr != '\0' || (value != 0 && value != 1)) {
-//                 printf("Invalid value for 'stream-pan-motor'. Use 0 (false) or 1 (true).\n");
-//             } else {
-//                 gimbal->panPositionStream = (bool)value;
-//                 printf("%s pan motor streaming\n", value ? "Enabled" : "Disabled");
-//             }
-//         } else {
-//             printf("Command 'stream-pan-motor' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-setpos") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             // If parsing error or out of range
-//             if (errno != 0 || *endptr != '\0' || value < AS5600_RAW_ANGLE_MIN || value > AS5600_RAW_ANGLE_MAX) {
-//                 printf("Invalid value for 'pan-setpos'. "
-//                        "Setpoint values must be valid raw encoder values (%u-%u).\n",
-//                        AS5600_RAW_ANGLE_MIN, AS5600_RAW_ANGLE_MAX);
-//             } 
-            
-//             // Not in gimbal soft limits
-//             else if ((gimbal->panLowerLimit < gimbal->panUpperLimit &&
-//                        (value < gimbal->panLowerLimit ||
-//                        value > gimbal->panUpperLimit)) ||
-//                        (gimbal->panLowerLimit > gimbal->panUpperLimit &&
-//                        value > gimbal->panUpperLimit &&
-//                        value < gimbal->panLowerLimit)) {
-//                 printf("Invalid value for 'pan-setpos'. "
-//                        "Setpoint values must be within gimbal pan soft limits (%.1f-%.1f).\n",
-//                        gimbal->panLowerLimit, gimbal->panUpperLimit);
-//                 printf("NOTE: These values have range %u-%u (and wrap back to %u after %u).\n",
-//                        AS5600_RAW_ANGLE_MIN, AS5600_RAW_ANGLE_MAX, AS5600_RAW_ANGLE_MIN, AS5600_RAW_ANGLE_MAX);
-//             } 
-            
-//             // Else valid
-//             else {
-//                 // Warn first soft limit set completed manually
-//                 if (gimbal->panLowerLimit == GIMBAL_DEFAULT_UNSET_ROM ||
-//                     gimbal->panUpperLimit == GIMBAL_DEFAULT_UNSET_ROM) {
-//                     printf("WARNING: Gimbal pan soft limits were never auto-set. "
-//                            "Manually setting for the first time... (can result in damage).\n");
-//                 }
-
-//                 gimbal->panPositionSetpoint = value;
-//                 printf("Updated pan setpoint to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-setpos' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-kp") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value < 0) {
-//                 printf("Invalid value for 'pan-pid-kp'. Gain values must be greater than or equal to 0.\n");
-//             } else {
-//                 gimbal->panPositionController.Kp = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan Kp gain to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-kp' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-ki") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value < 0) {
-//                 printf("Invalid value for 'pan-pid-ki'. Gain values must be greater than or equal to 0.\n");
-//             } else {
-//                 gimbal->panPositionController.Ki = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan Ki gain to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-ki' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-kd") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value < 0) {
-//                 printf("Invalid value for 'pan-pid-kd'. Gain values must be greater than or equal to 0.\n");
-//             } else {
-//                 gimbal->panPositionController.Kd = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan Kd gain to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-kd' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-tau") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value < 0) {
-//                 printf("Invalid value for 'pan-pid-tau'. Filter coefficients must be greater than or equal to 0.\n");
-//             } else {
-//                 gimbal->panPositionController.tau = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan derivative low pass filter coefficient (tau) to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-tau' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-outLimMin") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value > gimbal->panPositionController.outLimMax) {
-//                 printf("Invalid value for 'pan-pid-outLimMin'. Lower limit must be lower than the upper limit.\n");
-//             } else {
-//                 gimbal->panPositionController.outLimMin = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan pid ouput lower limit to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-outLimMin' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-outLimMax") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value < gimbal->panPositionController.outLimMin) {
-//                 printf("Invalid value for 'pan-pid-outLimMax'. Upper limit must be higher than the lower limit.\n");
-//             } else {
-//                 gimbal->panPositionController.outLimMax = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan pid ouput upper limit to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-outLimMax' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-intLimMin") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value > gimbal->panPositionController.intLimMax) {
-//                 printf("Invalid value for 'pan-pid-intLimMin'. Lower limit must be lower than the upper limit.\n");
-//             } else {
-//                 gimbal->panPositionController.intLimMin = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan pid integrator lower limit to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-intLimMin' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-intLimMax") == 0) {
-//         printf("\n");
-
-//         if (valueStr && valueStr[0] != '\0') {
-//             char *endptr;
-//             errno = 0;
-
-//             float value = strtof(valueStr, &endptr);
-
-//             if (errno != 0 || *endptr != '\0' || value < gimbal->panPositionController.intLimMin) {
-//                 printf("Invalid value for 'pan-pid-intLimMax'. Upper limit must be higher than the lower limit.\n");
-//             } else {
-//                 gimbal->panPositionController.intLimMax = value;
-//                 gimbal->savedConfiguration = false;
-//                 printf("Updated pan pid integrator upper limit to %f\n", value);
-//             }
-//         } else {
-//             printf("Command 'pan-pid-intLimMax' requires a value.\n");
-//         }
-
-//         printf("\n");
-//     }
-
-//     else if (strcmp(name, "pan-pid-revert") == 0) {
-//         printf("\n");
-//         gimbal->panPositionController = config->panPositionController;
-//         printf("Reverted back to last saved pan controller configuration\n");
-//         printf("\n");
-//     }
-    
-//     else {
-//         printf("Unknown command: '%s'\n", name);
-//         printf("\n");
-//     }
-// }
+#include "software_configuration.h"
+
+static void handle_stream_cmd(const opcomms_intcomm_StreamCommand *sc,
+                              gimbal_t *gimbal,
+                              opcomms_intcomm_Ack *ack) {
+    if (sc->has_stream_rate_hz) {
+        if (sc->stream_rate_hz < GIMBAL_MIN_STREAM_RATE_HZ ||
+            sc->stream_rate_hz > GIMBAL_MAX_STREAM_RATE_HZ) {
+            ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+            return;
+        }
+        gimbal->state.stream_rate = (uint16_t)sc->stream_rate_hz;
+    }
+    if (sc->has_global_streaming) gimbal->state.streaming        = sc->global_streaming;
+    if (sc->has_pan_pos_stream)   gimbal->state.pan_pos_stream   = sc->pan_pos_stream;
+    if (sc->has_pan_pid_stream)   gimbal->state.pan_pid_stream   = sc->pan_pid_stream;
+    if (sc->has_pan_motor_stream) gimbal->state.pan_motor_stream = sc->pan_motor_stream;
+}
+
+static void handle_system_action(opcomms_intcomm_SystemAction action,
+                                 gimbal_t *gimbal,
+                                 opcomms_intcomm_Ack *ack) {
+    switch (action) {
+        case opcomms_intcomm_SystemAction_ACTION_GIMBAL_FREE:
+            gimbal->state.gimbal_mode = GIMBAL_MODE_FREE;
+            break;
+
+        case opcomms_intcomm_SystemAction_ACTION_GIMBAL_ARM: {
+            if (gimbal->state.pan_lower_limit == GIMBAL_DEFAULT_UNSET_ROM ||
+                gimbal->state.pan_upper_limit == GIMBAL_DEFAULT_UNSET_ROM) {
+                ack->code = opcomms_intcomm_AckCode_STATUS_UNSET_LIMITS;
+                return;
+            }
+            uint16_t raw = as5600_get_raw_angle((as5600_t *)&gimbal->engine.pan_encoder);
+            bool inLimits = (gimbal->state.pan_lower_limit < gimbal->state.pan_upper_limit)
+                ? (raw >= gimbal->state.pan_lower_limit && raw <= gimbal->state.pan_upper_limit)
+                : (raw >= gimbal->state.pan_lower_limit || raw <= gimbal->state.pan_upper_limit);
+
+            if (!inLimits) {
+                ack->code = opcomms_intcomm_AckCode_STATUS_OUT_OF_LIMITS;
+                return;
+            }
+            gimbal->state.pan_position_setpoint = (float)raw;
+            gimbal->state.gimbal_mode = GIMBAL_MODE_ARMED;
+            break;
+        }
+
+        case opcomms_intcomm_SystemAction_ACTION_CONFIG_SAVE:
+            if (gimbal->state.gimbal_mode != GIMBAL_MODE_FREE) {
+                ack->code = opcomms_intcomm_AckCode_STATUS_OPERATION_FAILED;
+                return;
+            }
+            gimbal->config.pan_position_controller = gimbal->engine.pan_position_controller;
+            save_gimbal_configuration(&gimbal->config);
+            gimbal->state.saved_configuration = true;
+            break;
+
+        case opcomms_intcomm_SystemAction_ACTION_CONFIG_READ: {
+            ack->which_response_data = opcomms_intcomm_Ack_config_data_tag;
+            opcomms_intcomm_GimbalConfigData *cfg = &ack->response_data.config_data;
+            volatile pid_controller_t *saved_pid = &gimbal->config.pan_position_controller;
+
+            cfg->has_pan_pid = true;
+            cfg->pan_pid.has_kp          = true; cfg->pan_pid.kp          = saved_pid->Kp;
+            cfg->pan_pid.has_ki          = true; cfg->pan_pid.ki          = saved_pid->Ki;
+            cfg->pan_pid.has_kd          = true; cfg->pan_pid.kd          = saved_pid->Kd;
+            cfg->pan_pid.has_tau         = true; cfg->pan_pid.tau         = saved_pid->tau;
+            cfg->pan_pid.has_out_lim_min = true; cfg->pan_pid.out_lim_min = saved_pid->outLimMin;
+            cfg->pan_pid.has_out_lim_max = true; cfg->pan_pid.out_lim_max = saved_pid->outLimMax;
+            cfg->pan_pid.has_int_lim_min = true; cfg->pan_pid.int_lim_min = saved_pid->intLimMin;
+            cfg->pan_pid.has_int_lim_max = true; cfg->pan_pid.int_lim_max = saved_pid->intLimMax;
+            break;
+        }
+
+        case opcomms_intcomm_SystemAction_ACTION_GIMBAL_READ: {
+            ack->which_response_data = opcomms_intcomm_Ack_state_data_tag;
+            opcomms_intcomm_GimbalStateData *st = &ack->response_data.state_data;
+
+            st->mode = (gimbal->state.gimbal_mode == GIMBAL_MODE_ARMED)
+                ? opcomms_intcomm_GimbalMode_GIMBAL_MODE_ARMED
+                : opcomms_intcomm_GimbalMode_GIMBAL_MODE_FREE;
+            st->saved_configuration    = gimbal->state.saved_configuration;
+            st->pan_setpoint           = gimbal->state.pan_position_setpoint;
+            st->pan_current_angle      = gimbal->state.pan_position;
+            st->has_pan_limits         = true;
+            st->pan_limits.lower_limit = gimbal->state.pan_lower_limit;
+            st->pan_limits.upper_limit = gimbal->state.pan_upper_limit;
+            st->pan_limits.is_set      = (gimbal->state.pan_lower_limit != GIMBAL_DEFAULT_UNSET_ROM);
+            st->streaming_global       = gimbal->state.streaming;
+            st->stream_rate_hz         = gimbal->state.stream_rate;
+            break;
+        }
+
+        default:
+            ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+            break;
+    }
+}
+
+static void handle_setpoint_cmd(const opcomms_intcomm_SetpointCommand *sp,
+                                gimbal_t *gimbal,
+                                opcomms_intcomm_Ack *ack) {
+    if (sp->axis != opcomms_intcomm_Axis_AXIS_PAN ||
+        sp->setpoint < AS5600_RAW_ANGLE_MIN ||
+        sp->setpoint > AS5600_RAW_ANGLE_MAX) {
+        ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+        return;
+    }
+
+    bool outOfLimits = (gimbal->state.pan_lower_limit < gimbal->state.pan_upper_limit)
+        ? (sp->setpoint < gimbal->state.pan_lower_limit || sp->setpoint > gimbal->state.pan_upper_limit)
+        : (sp->setpoint > gimbal->state.pan_upper_limit && sp->setpoint < gimbal->state.pan_lower_limit);
+
+    if (outOfLimits) {
+        ack->code = opcomms_intcomm_AckCode_STATUS_OUT_OF_LIMITS;
+        return;
+    }
+    gimbal->state.pan_position_setpoint = sp->setpoint;
+}
+
+static void handle_pid_set_cmd(const opcomms_intcomm_PidSetCommand *pc,
+                               gimbal_t *gimbal,
+                               opcomms_intcomm_Ack *ack) {
+    if (pc->axis != opcomms_intcomm_Axis_AXIS_PAN || !pc->has_params) {
+        ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+        return;
+    }
+
+    const opcomms_intcomm_PidParams *p = &pc->params;
+    volatile pid_controller_t *ctrl = &gimbal->engine.pan_position_controller;
+
+    if ((p->has_kp && p->kp < 0.0f) || (p->has_ki && p->ki < 0.0f) ||
+        (p->has_kd && p->kd < 0.0f) || (p->has_tau && p->tau < 0.0f)) {
+        ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+        return;
+    }
+
+    float nextOutMin = p->has_out_lim_min ? p->out_lim_min : ctrl->outLimMin;
+    float nextOutMax = p->has_out_lim_max ? p->out_lim_max : ctrl->outLimMax;
+    float nextIntMin = p->has_int_lim_min ? p->int_lim_min : ctrl->intLimMin;
+    float nextIntMax = p->has_int_lim_max ? p->int_lim_max : ctrl->intLimMax;
+
+    if (nextOutMin > nextOutMax || nextIntMin > nextIntMax) {
+        ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+        return;
+    }
+
+    if (p->has_kp)          ctrl->Kp        = p->kp;
+    if (p->has_ki)          ctrl->Ki        = p->ki;
+    if (p->has_kd)          ctrl->Kd        = p->kd;
+    if (p->has_tau)         ctrl->tau       = p->tau;
+    if (p->has_out_lim_min) ctrl->outLimMin = p->out_lim_min;
+    if (p->has_out_lim_max) ctrl->outLimMax = p->out_lim_max;
+    if (p->has_int_lim_min) ctrl->intLimMin = p->int_lim_min;
+    if (p->has_int_lim_max) ctrl->intLimMax = p->int_lim_max;
+
+    gimbal->state.saved_configuration = false;
+}
+
+static void handle_pid_revert_cmd(const opcomms_intcomm_PidRevertCommand *rev,
+                                  gimbal_t *gimbal,
+                                  opcomms_intcomm_Ack *ack) {
+    if (rev->axis != opcomms_intcomm_Axis_AXIS_PAN) {
+        ack->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+        return;
+    }
+    gimbal->engine.pan_position_controller = gimbal->config.pan_position_controller;
+}
+
+void command_dispatch(const opcomms_intcomm_Command *cmd,
+                      gimbal_t *gimbal,
+                      opcomms_intcomm_Ack *ack_out) {
+    *ack_out = (opcomms_intcomm_Ack)opcomms_intcomm_Ack_init_zero;
+    ack_out->packet_id = cmd->packet_id;
+    ack_out->code      = opcomms_intcomm_AckCode_STATUS_OK;
+
+    switch (cmd->which_cmd) {
+        case opcomms_intcomm_Command_stream_command_tag:
+            handle_stream_cmd(&cmd->cmd.stream_command, gimbal, ack_out);
+            break;
+        case opcomms_intcomm_Command_system_action_tag:
+            handle_system_action(cmd->cmd.system_action, gimbal, ack_out);
+            break;
+        case opcomms_intcomm_Command_setpoint_command_tag:
+            handle_setpoint_cmd(&cmd->cmd.setpoint_command, gimbal, ack_out);
+            break;
+        case opcomms_intcomm_Command_pid_set_command_tag:
+            handle_pid_set_cmd(&cmd->cmd.pid_set_command, gimbal, ack_out);
+            break;
+        case opcomms_intcomm_Command_pid_revert_command_tag:
+            handle_pid_revert_cmd(&cmd->cmd.pid_revert_command, gimbal, ack_out);
+            break;
+        default:
+            ack_out->code = opcomms_intcomm_AckCode_STATUS_INVALID_DATA;
+            break;
+    }
+}

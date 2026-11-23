@@ -6,18 +6,11 @@
 #include "controls/pid.h"
 #include "software_configuration.h"
 
-// Gimbal serial number is restricted to a uint8 for now
-#define GIMBAL_SERIAL_NUMBER_MIN  0
-#define GIMBAL_SERIAL_NUMBER_MAX  255
-
 /**
  * @struct gimbal_configuration_t
  * @brief Represents the saved configuration of the gimbal.
  */
 typedef struct {
-    // Version tracking
-    uint8_t serial_number;
-
     // Controls gains
     volatile pid_controller_t pan_position_controller;
 } gimbal_configuration_t;

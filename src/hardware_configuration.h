@@ -19,6 +19,7 @@
 #define PAN_UPPER_LIMIT_PIN      16
 
 // Debug hardware
+#define ERROR_PIN                21
 #define TEST_PIN                 22
 
 // PWM settings

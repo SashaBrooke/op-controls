@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "pico/stdlib.h"
+#include "pico/flash.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 
@@ -38,8 +39,6 @@ void setup_gimbal_configuration(gimbal_configuration_t *config) {
         );
     } else {
         // Setup using default values
-        // printf("Creating new configuration using default values.\n");
-        config->serial_number = 0;
         config->pan_position_controller = pid_setup(
             0.0f, 0.0f, 0.0f,
             0.0f,
@@ -82,30 +81,46 @@ bool load_gimbal_configuration(gimbal_configuration_t *config) {
     }
 }
 
+typedef struct {
+    const uint8_t *buffer;
+    size_t erase_bytes;
+    size_t write_bytes;
+} flash_write_args_t;
+
+static void flash_write_worker(void *param) {
+    flash_write_args_t *args = (flash_write_args_t *)param;
+    flash_range_erase(FLASH_TARGET_OFFSET, args->erase_bytes);
+    flash_range_program(FLASH_TARGET_OFFSET, args->buffer, args->write_bytes);
+}
+
 /* Save gimbal configuration to non-volatile flash memory */
 void save_gimbal_configuration(gimbal_configuration_t *config) {
     memcpy(&gc, config, sizeof(gimbal_configuration_t));
-    uint8_t* configAsBytes = (uint8_t*) &gc;
+    uint8_t *configAsBytes = (uint8_t *)&gc;
     int configSize = sizeof(*config);
 
-    // Create a buffer to hold the configuration and a computed checksum
-    int bufferSize = configSize + 1;
-    uint8_t *buffer = malloc(bufferSize);
+    // Pad buffer to an exact multiple of FLASH_PAGE_SIZE (required by flash_range_program)
+    int rawSize = configSize + 1;
+    int writePages = (rawSize + FLASH_PAGE_SIZE - 1) / FLASH_PAGE_SIZE;
+    size_t writeBytes = writePages * FLASH_PAGE_SIZE;
+
+    int sectorCount = (writeBytes + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
+    size_t eraseBytes = sectorCount * FLASH_SECTOR_SIZE;
+
+    uint8_t *buffer = calloc(1, writeBytes);
+    if (buffer == NULL) return;
+
     memcpy(buffer, configAsBytes, configSize);
+    buffer[configSize] = calculate_checksum(configAsBytes, configSize);
 
-    uint8_t checksum = calculate_checksum(configAsBytes, configSize);
-    buffer[configSize] = checksum;  // Append the checksum as the last byte
-    
-    // Calculate how many flash pages we're gonna need to write
-    int writeSize = (bufferSize / FLASH_PAGE_SIZE) + 1;
+    flash_write_args_t args = {
+        .buffer      = buffer,
+        .erase_bytes = eraseBytes,
+        .write_bytes = writeBytes,
+    };
 
-    // Calculate how many flash sectors we're gonna need to erase
-    int sectorCount = ((writeSize * FLASH_PAGE_SIZE) / FLASH_SECTOR_SIZE) + 1;
-
-    uint32_t interrupts = save_and_disable_interrupts();
-    flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE * sectorCount);
-    flash_range_program(FLASH_TARGET_OFFSET, buffer, FLASH_PAGE_SIZE * writeSize);
-    restore_interrupts(interrupts);
+    // Safely locks out Core 0 under FreeRTOS SMP, disables IRQs, writes flash, and restores
+    flash_safe_execute(flash_write_worker, &args, UINT32_MAX);
 
     free(buffer);
 }

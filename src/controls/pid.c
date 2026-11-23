@@ -41,9 +41,10 @@ pid_controller_t pid_setup(float Kp, float Ki, float Kd, float tau,
         .intLimMin = intLimMin,
         .intLimMax = intLimMax,
         .T = T,
+        .proportional = 0.0f,
         .integrator = 0.0f,
-        .prevError = 0.0f,
         .differentiator = 0.0f,
+        .prevError = 0.0f,
         .prevMeasurement = 0.0f,
         .output = 0.0f,
         .maxMeasurement = maxMeasurement
@@ -54,9 +55,10 @@ pid_controller_t pid_setup(float Kp, float Ki, float Kd, float tau,
 
 /* Reset PID saved state parameters */
 void pid_reset(volatile pid_controller_t *pid) {
+    pid->proportional = 0.0f;
     pid->integrator = 0.0f;
-    pid->prevError = 0.0f;
     pid->differentiator = 0.0f;
+    pid->prevError = 0.0f;
     pid->prevMeasurement = 0.0f;
     pid->output = 0.0f;
 }
@@ -97,7 +99,7 @@ float pid_update(volatile pid_controller_t *pid, float setpoint, float measureme
     }
 
     // Proportional term
-    float proportional = pid->Kp * error;
+    pid->proportional = pid->Kp * error;
 
     // Integral term with anti-windup clamping
     pid->integrator += 0.5f * pid->Ki * pid->T * (error + pid->prevError);
@@ -114,7 +116,7 @@ float pid_update(volatile pid_controller_t *pid, float setpoint, float measureme
                         / (2.0f * pid->tau + pid->T);
 
     // Compute output
-    pid->output = proportional + pid->integrator + pid->differentiator;
+    pid->output = pid->proportional + pid->integrator + pid->differentiator;
 
     // Clamp output
     if (pid->output > pid->outLimMax) {
