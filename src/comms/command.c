@@ -34,17 +34,16 @@ static void handle_system_action(opcomms_intcomm_SystemAction action,
                 ack->code = opcomms_intcomm_AckCode_STATUS_UNSET_LIMITS;
                 return;
             }
-            uint16_t raw = as5600_get_raw_angle((as5600_t *)&gimbal->engine.pan_encoder);
-            bool inLimits = (gimbal->state.pan_lower_limit < gimbal->state.pan_upper_limit)
-                ? (raw >= gimbal->state.pan_lower_limit && raw <= gimbal->state.pan_upper_limit)
-                : (raw >= gimbal->state.pan_lower_limit || raw <= gimbal->state.pan_upper_limit);
-
-            if (!inLimits) {
+            float current_angle = gimbal->state.pan_position;
+            if (in_rotary_limits(current_angle,
+                                 gimbal->state.pan_lower_limit,
+                                 gimbal->state.pan_upper_limit) != ROTARYUTILS_SUCCESS) {
                 ack->code = opcomms_intcomm_AckCode_STATUS_OUT_OF_LIMITS;
-                return;
+                break;
             }
-            gimbal->state.pan_position_setpoint = (float)raw;
+            gimbal->state.pan_position_setpoint = current_angle;
             gimbal->state.gimbal_mode = GIMBAL_MODE_ARMED;
+            ack->code = opcomms_intcomm_AckCode_STATUS_OK;
             break;
         }
 

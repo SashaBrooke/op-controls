@@ -1,7 +1,6 @@
 #include "unity.h"
 #include "comms/command.h"
 
-extern uint16_t mock_as5600_raw_angle;
 extern bool mock_config_saved;
 extern gimbal_configuration_t mock_last_saved_config;
 
@@ -14,8 +13,7 @@ void setUp(void) {
         1.5f, 0.25f, 0.05f, 0.02f, -100.0f, 100.0f, -50.0f, 50.0f, 0.001f, 4096.0f
     );
     gimbal.config.pan_position_controller = gimbal.engine.pan_position_controller;
-
-    mock_as5600_raw_angle = 0;
+    gimbal.state.pan_position = 0.0f;
     mock_config_saved = false;
     mock_last_saved_config = (gimbal_configuration_t){0};
 }
@@ -34,11 +32,11 @@ void test_arm_and_free_lifecycle(void) {
 
     gimbal.state.pan_lower_limit = 1000.0f;
     gimbal.state.pan_upper_limit = 2000.0f;
-    mock_as5600_raw_angle = 2500;
+    gimbal.state.pan_position = 2500.0f;
     command_dispatch(&cmd, &gimbal, &ack);
     TEST_ASSERT_EQUAL(opcomms_intcomm_AckCode_STATUS_OUT_OF_LIMITS, ack.code);
 
-    mock_as5600_raw_angle = 1450;
+    gimbal.state.pan_position = 1450.0f;
     command_dispatch(&cmd, &gimbal, &ack);
     TEST_ASSERT_EQUAL(opcomms_intcomm_AckCode_STATUS_OK, ack.code);
     TEST_ASSERT_EQUAL(GIMBAL_MODE_ARMED, gimbal.state.gimbal_mode);
