@@ -267,4 +267,25 @@ class CommsTUI:
         stdscr.addstr(7, 2, pid_str[:w-3])
 
         stdscr.addstr(9, 0, "--- COMMAND & ACK LOG ---"[:w-1], curses.A_BOLD)
-        avail_rows = max(1, h - 12)
+        avail_rows = max(1, h - 11)
+        for idx, line in enumerate(log_lines[-avail_rows:]):
+            if 10 + idx < h - 1:
+                stdscr.addstr(10 + idx, 0, line[:w-1])
+
+        stdscr.refresh()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: uv run comms_tui.py <COM_PORT> [BAUD]")
+        sys.exit(1)
+
+    port = sys.argv[1]
+    baud = int(sys.argv[2]) if len(sys.argv) > 2 else 115200
+    tui = CommsTUI(port, baud)
+    try:
+        curses.wrapper(tui.run)
+    finally:
+        tui.running = False
+        if getattr(tui, "ser", None) and tui.ser.is_open:
+            tui.ser.close()
