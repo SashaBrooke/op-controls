@@ -1,0 +1,11 @@
+[project]
+name = "tools"
+version = "0.1.0"
+description = "Python TUI for firmware comms testing"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "grpcio-tools>=1.85.3",
+    "protobuf>=7.36.2",
+    "pyserial>=3.5",
+]

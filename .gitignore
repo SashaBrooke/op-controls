@@ -16,3 +16,10 @@ build/
 src/generated/
 src/proto/uart.pb.c
 src/proto/uart.pb.h
+
+# Ignore any Python tooling files
+*.pyc
+*.pyo
+*.pyd
+**.venv/
+**.env/
