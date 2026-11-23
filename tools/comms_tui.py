@@ -11,7 +11,7 @@ import intcomm_pb2 as pb
 
 # --- COBS & CRC-16 Framing ---
 
-def crc16_ccitt(data: bytes, init: int = 0xFFFF) -> int:
+def crc16_ccitt(data: bytes, init: int = 0x0000) -> int:
     crc = init
     for byte in data:
         crc ^= byte << 8
