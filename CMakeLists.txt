@@ -142,30 +142,56 @@ elseif(TARGET_GROUP STREQUAL "TESTING")
     enable_testing()
 
     # --- Unit tests ---
-    add_executable(test_command
-        ${TEST_SOURCE_DIR}/test_command.c
-        ${TEST_SOURCE_DIR}/mocks/mock_as5600.c
-        ${TEST_SOURCE_DIR}/mocks/mock_gimbal_configuration.c
-        ${FW_SOURCE_DIR}/comms/command.c
-        ${FW_SOURCE_DIR}/comms/packet.c
-        ${FW_SOURCE_DIR}/comms/proto_codec.c
-        ${FW_SOURCE_DIR}/gimbal/gimbal_state.c
+    function(add_unity_test TEST_NAME)
+        add_executable(${TEST_NAME} ${ARGN})
+        target_include_directories(${TEST_NAME} PRIVATE
+            ${FW_SOURCE_DIR}
+            ${TEST_SOURCE_DIR}/mocks
+        )
+        target_link_libraries(${TEST_NAME} Unity proto m)
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endfunction()
+
+    add_unity_test(test_time_utils
+        ${TEST_SOURCE_DIR}/test_time_utils.c
+    )
+
+    add_unity_test(test_rotary_utils
+        ${TEST_SOURCE_DIR}/test_rotary_utils.c
+        ${FW_SOURCE_DIR}/utils/rotary_utils.c
+    )
+
+    add_unity_test(test_pid
+        ${TEST_SOURCE_DIR}/test_pid.c
         ${FW_SOURCE_DIR}/controls/pid.c
         ${FW_SOURCE_DIR}/utils/rotary_utils.c
     )
 
-    target_include_directories(test_command PRIVATE
-        ${FW_SOURCE_DIR}
-        ${TEST_SOURCE_DIR}/mocks
+    add_unity_test(test_gimbal_state
+        ${TEST_SOURCE_DIR}/test_gimbal_state.c
+        ${FW_SOURCE_DIR}/gimbal/gimbal_state.c
     )
 
-    target_link_libraries(test_command
-        Unity
-        proto
-        m
+    add_unity_test(test_packet
+        ${TEST_SOURCE_DIR}/test_packet.c
+        ${FW_SOURCE_DIR}/comms/packet.c
     )
 
-    add_test(NAME test_command COMMAND test_command)
+    add_unity_test(test_proto_codec
+        ${TEST_SOURCE_DIR}/test_proto_codec.c
+        ${FW_SOURCE_DIR}/comms/proto_codec.c
+        ${FW_SOURCE_DIR}/comms/packet.c
+    )
+
+    add_unity_test(test_command
+        ${TEST_SOURCE_DIR}/test_command.c
+        ${TEST_SOURCE_DIR}/mocks/mock_as5600.c
+        ${TEST_SOURCE_DIR}/mocks/mock_gimbal_configuration.c
+        ${FW_SOURCE_DIR}/comms/command.c
+        ${FW_SOURCE_DIR}/gimbal/gimbal_state.c
+        ${FW_SOURCE_DIR}/controls/pid.c
+        ${FW_SOURCE_DIR}/utils/rotary_utils.c
+    )
 else()
     message(WARNING "Unknown TARGET_GROUP: ${TARGET_GROUP}")
 endif()
