@@ -8,4 +8,5 @@ dependencies = [
     "grpcio-tools>=1.85.3",
     "protobuf>=7.36.2",
     "pyserial>=3.5",
+    "windows-curses>=2.4.2",
 ]
